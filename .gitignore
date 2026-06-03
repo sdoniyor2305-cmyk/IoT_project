@@ -130,7 +130,6 @@ out/
 .env*.local
 
 # Docker
-.dockerignore
 docker-compose.override.yml
 .docker/
 
