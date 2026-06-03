@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: iot_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./iot_keygen.db
+      - SECRET_KEY=change-this-secret-key-in-production
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+    volumes:
+      - ./backend:/app
+      - ./crypto:/crypto
+      - iot_db:/app/data
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - iot_network
+    restart: unless-stopped
+
+  # Frontend Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: iot_frontend
+    ports:
+      - "5173:3000"
+    environment:
+      - VITE_API_URL=http://backend:8000
+    networks:
+      - iot_network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Database Service (PostgreSQL - production only)
+  db:
+    image: postgres:15-alpine
+    container_name: iot_database
+    environment:
+      POSTGRES_DB: iot_keygen
+      POSTGRES_USER: iotuser
+      POSTGRES_PASSWORD: iotpass123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - iot_network
+    profiles:
+      - production
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (production only)
+  nginx:
+    image: nginx:alpine
+    container_name: iot_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - iot_network
+    depends_on:
+      - backend
+      - frontend
+    profiles:
+      - production
+    restart: unless-stopped
+
+volumes:
+  iot_db:
+  postgres_data:
+
+networks:
+  iot_network:
+    driver: bridge

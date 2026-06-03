@@ -1,0 +1,71 @@
+MIT License
+
+Copyright (c) 2024 IoT Key Generation Platform Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+THIRD-PARTY LICENSES:
+
+This project uses the following open-source libraries:
+
+1. FastAPI - BSD 3-Clause License
+2. SQLAlchemy - MIT License
+3. Pydantic - MIT License
+4. PyJWT - MIT License
+5. Bcrypt - Apache License 2.0
+6. React - MIT License
+7. Tailwind CSS - MIT License
+8. Recharts - MIT License
+9. Lucide React - ISC License
+10. Axios - MIT License
+11. Vite - MIT License
+
+For full license texts, visit:
+https://github.com/
+
+---
+
+CRYPTOGRAPHIC ALGORITHMS:
+
+- ASCON: Public domain
+- AES: Public domain
+- SPECK: Public domain
+- DRBG (NIST SP 800-90A): Public domain
+
+---
+
+DISCLAIMER:
+
+This software is provided for educational and research purposes. While the
+implementation follows standard cryptographic practices, it should be reviewed
+by qualified security professionals before use in production environments.
+
+The authors are not liable for any damages or security issues resulting from
+the use of this software.
+
+---
+
+For academic use, please cite:
+@thesis{iot_keygen_2024,
+  title={IoT Key Generation Platform},
+  author={Contributors},
+  year={2024}
+}
