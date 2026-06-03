@@ -73,7 +73,7 @@ def create_superadmin():
         if not existing:
             superadmin = User(
                 username="superadmin",
-                email="superadmin@iot.local",
+                email="admin@iot.com",
                 hashed_password=PasswordHelper.hash_password("Admin123"),
                 full_name="Super Administrator",
                 is_active=True,
