@@ -1,0 +1,12 @@
+# Frontend service — set Root Directory to /frontend in Railway dashboard.
+# VITE_API_URL must be set in Railway env vars BEFORE the first deploy
+# (Vite bakes it into the bundle at build time).
+
+[build]
+builder = "nixpacks"
+buildCommand = "npm ci && npm run build"
+
+[deploy]
+startCommand = "npm run start"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10

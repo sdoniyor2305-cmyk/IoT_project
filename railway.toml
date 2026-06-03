@@ -1,0 +1,12 @@
+# Backend service — set Root Directory to / (repo root) in Railway dashboard
+# This lets the build context include /crypto, which main.py adds to sys.path.
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+healthcheckPath = "/health"
+healthcheckTimeout = 300
