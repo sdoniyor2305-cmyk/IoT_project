@@ -74,7 +74,7 @@ def create_superadmin():
             superadmin = User(
                 username="superadmin",
                 email="superadmin@iot.local",
-                hashed_password=PasswordHelper.hash_password("admin123"),
+                hashed_password=PasswordHelper.hash_password("Admin123"),
                 full_name="Super Administrator",
                 is_active=True,
                 is_admin=True,
@@ -82,7 +82,7 @@ def create_superadmin():
             )
             db.add(superadmin)
             db.commit()
-            logger.info("Superadmin account created (username: superadmin, password: admin123)")
+            logger.info("Superadmin account created (username: superadmin, password: Admin123)")
         else:
             # Ensure existing superadmin has correct flags (idempotent)
             changed = False
