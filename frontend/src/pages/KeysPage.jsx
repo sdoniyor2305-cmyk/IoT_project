@@ -45,6 +45,7 @@ const KeysPage = () => {
   const [keys, setKeys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [visibleKeyId, setVisibleKeyId] = useState(null);
+  const [keyValues, setKeyValues] = useState({});
   const [filterAlgo, setFilterAlgo] = useState('');
   const [filterMethod, setFilterMethod] = useState('');
 
@@ -60,6 +61,22 @@ const KeysPage = () => {
       console.error('Failed to load keys:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleKeyValue = async (keyId) => {
+    if (visibleKeyId === keyId) {
+      setVisibleKeyId(null);
+      return;
+    }
+    setVisibleKeyId(keyId);
+    if (!keyValues[keyId]) {
+      try {
+        const detail = await keyAPI.get(keyId);
+        setKeyValues(prev => ({ ...prev, [keyId]: detail.key_value }));
+      } catch (e) {
+        setKeyValues(prev => ({ ...prev, [keyId]: '(failed to load)' }));
+      }
     }
   };
 
@@ -199,7 +216,7 @@ const KeysPage = () => {
                       </div>
                       {visibleKeyId === key.id && (
                         <div className="mt-1 font-mono text-xs text-blue-400 break-all max-w-xs">
-                          {key.key_value || '(not loaded)'}
+                          {keyValues[key.id] || 'loading...'}
                         </div>
                       )}
                     </td>
@@ -296,7 +313,7 @@ const KeysPage = () => {
                     <td className="py-3 px-3">
                       <div className="flex gap-1">
                         <button
-                          onClick={() => setVisibleKeyId(visibleKeyId === key.id ? null : key.id)}
+                          onClick={() => handleToggleKeyValue(key.id)}
                           className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-900 dark:hover:text-white"
                           title="Show/hide key value"
                         >

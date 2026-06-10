@@ -67,6 +67,10 @@ class IoTDeviceResponse(BaseModel):
     protocol: Optional[str] = None
     is_secured: bool = False
     bound_key_id: Optional[int] = None
+    cpu_type: Optional[str] = None
+    memory_kb: Optional[int] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -206,6 +210,38 @@ class EntropyAnalysisResponse(BaseModel):
     coupon_collector_test: Dict[str, Any]
     overall_randomness_score: float
     passes_all_tests: bool
+
+
+# ==================== Encryption Schemas ====================
+
+class EncryptionRequest(BaseModel):
+    key_id: Optional[int] = None
+    key: Optional[str] = None
+    algorithm: str = Field(..., description="AES, ASCON, or SPECK")
+    plaintext: str = Field(..., description="Hex-encoded plaintext")
+
+
+class EncryptionResponse(BaseModel):
+    ciphertext: str
+    algorithm: str
+    execution_time_ms: float
+    throughput_kbs: float
+    operation_id: str
+
+
+class DecryptionRequest(BaseModel):
+    key_id: Optional[int] = None
+    key: Optional[str] = None
+    algorithm: str = Field(..., description="AES, ASCON, or SPECK")
+    ciphertext: str = Field(..., description="Hex-encoded ciphertext")
+
+
+class DecryptionResponse(BaseModel):
+    plaintext: str
+    algorithm: str
+    is_valid: bool
+    execution_time_ms: float
+    operation_id: str
 
 
 # ==================== Operation Schemas ====================
