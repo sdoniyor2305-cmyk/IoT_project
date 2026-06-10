@@ -11,7 +11,8 @@ import uuid
 
 from app.models.models import CryptographicKey, User, IoTDevice
 from app.schemas.schemas import (
-    KeyGenerationRequest, CryptographicKeyResponse, CryptographicKeyDetailResponse
+    KeyGenerationRequest, CryptographicKeyResponse, CryptographicKeyDetailResponse,
+    CryptographicKeyListResponse
 )
 from app.auth.auth import get_current_user
 from app.utils.database import get_db, log_action
@@ -107,28 +108,38 @@ def generate_key(
     return new_key
 
 
-@router.get("", response_model=List[CryptographicKeyResponse])
+@router.get("", response_model=List[CryptographicKeyListResponse])
 def list_keys(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    List all keys for current user
-    
-    Args:
-        current_user: Current authenticated user
-        db: Database session
-        
-    Returns:
-        List of keys
-    """
+    """List all keys for current user, including bound device name."""
     user_id = int(current_user.get("sub"))
-    
+
     keys = db.query(CryptographicKey).filter(
         CryptographicKey.user_id == user_id
     ).all()
-    
-    return keys
+
+    result = []
+    for k in keys:
+        device_name = None
+        if k.device:
+            device_name = k.device.device_name
+        result.append(CryptographicKeyListResponse(
+            id=k.id,
+            key_id=k.key_id,
+            key_length_bits=k.key_length_bits,
+            generation_method=k.generation_method,
+            algorithm_used=k.algorithm_used,
+            is_active=k.is_active,
+            randomness_score=k.randomness_score,
+            created_at=k.created_at,
+            bound_protocol=k.bound_protocol,
+            device_id=k.device_id,
+            device_name=device_name,
+            shannon_entropy=k.shannon_entropy,
+        ))
+    return result
 
 
 @router.get("/{key_id}", response_model=CryptographicKeyDetailResponse)

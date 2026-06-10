@@ -1,6 +1,6 @@
 """
 Database Models for IoT Key Generation Platform
-Purpose: Define data structures for users, devices, keys, and operations
+Purpose: Define data structures for users, devices, keys, operations, and communications
 Uses SQLAlchemy ORM with SQLite
 """
 
@@ -61,15 +61,20 @@ class IoTDevice(Base):
     cpu_type = Column(String(100))
     memory_kb = Column(Integer)  # RAM in KB
     storage_kb = Column(Integer)  # Storage in KB
-    
+
+    # IoT Protocol binding
+    protocol = Column(String(20))  # mqtt, coap, tls
+    is_secured = Column(Boolean, default=False)
+    bound_key_id = Column(Integer, nullable=True)  # FK avoided to prevent circular ref
+
     # User relationship
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     owner = relationship('User', back_populates='devices')
-    
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
     keys = relationship('CryptographicKey', back_populates='device')
     operations = relationship('Operation', back_populates='device')
@@ -95,6 +100,7 @@ class CryptographicKey(Base):
     # Generation method
     generation_method = Column(String(50), nullable=False)  # drbg, trng, puf
     algorithm_used = Column(String(50), nullable=False)  # AES, ASCON, SPECK
+    bound_protocol = Column(String(20))  # mqtt, coap, tls (set when key is bound to a device)
     
     # Properties
     is_active = Column(Boolean, default=True)
@@ -248,3 +254,36 @@ class AuditLog(Base):
 
     def __repr__(self):
         return f"<AuditLog(id={self.id}, action={self.action}, username={self.username})>"
+
+
+class Communication(Base):
+    """IoT device-to-device communication simulation records"""
+    __tablename__ = 'communications'
+
+    id = Column(Integer, primary_key=True, index=True)
+    comm_id = Column(String(100), unique=True, index=True, nullable=False)
+
+    source_device_id = Column(Integer, ForeignKey('iot_devices.id'))
+    target_device_id = Column(Integer, ForeignKey('iot_devices.id'))
+
+    protocol = Column(String(20))       # mqtt, coap, tls
+    algorithm = Column(String(20))      # AES, ASCON, SPECK
+    encrypted_message = Column(Text)
+    original_message = Column(Text)
+
+    transmission_time_ms = Column(Float)
+    encryption_time_ms = Column(Float)
+    decryption_time_ms = Column(Float)
+
+    key_method = Column(String(50))     # drbg, trng, puf
+    key_length_bits = Column(Integer)
+
+    status = Column(String(20), default='success')
+    user_id = Column(Integer, ForeignKey('users.id'))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    source_device = relationship('IoTDevice', foreign_keys=[source_device_id])
+    target_device = relationship('IoTDevice', foreign_keys=[target_device_id])
+
+    def __repr__(self):
+        return f"<Communication(id={self.id}, comm_id={self.comm_id}, protocol={self.protocol})>"

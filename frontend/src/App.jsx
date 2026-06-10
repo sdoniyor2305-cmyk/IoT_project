@@ -9,7 +9,7 @@ import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import DevicesPage from './pages/DevicesPage';
 import KeysPage from './pages/KeysPage';
-import EncryptionPage from './pages/EncryptionPage';
+import CommunicationPage from './pages/CommunicationPage';
 import AnalysisPage from './pages/AnalysisPage';
 import AboutPage from './pages/AboutPage';
 import AdminPage from './pages/AdminPage';
@@ -59,7 +59,8 @@ const AppContent = () => {
                     <Route path="/" element={<DashboardPage />} />
                     <Route path="/devices" element={<DevicesPage />} />
                     <Route path="/keys" element={<KeysPage />} />
-                    <Route path="/encryption" element={<EncryptionPage />} />
+                    <Route path="/communication" element={<CommunicationPage />} />
+                    <Route path="/encryption" element={<Navigate to="/communication" />} />
                     <Route path="/analysis" element={<AnalysisPage />} />
                     <Route path="/about" element={<AboutPage />} />
                     <Route path="/admin" element={<AdminPage />} />

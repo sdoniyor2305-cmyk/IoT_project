@@ -50,7 +50,30 @@ def _migrate_schema():
                 with engine.connect() as conn:
                     conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user'"))
                     conn.commit()
-                logger.info("Migrated: added 'role' column to users table")
+                logger.info("Migrated: added 'role' to users")
+
+        if 'iot_devices' in tables:
+            columns = [col['name'] for col in inspector.get_columns('iot_devices')]
+            with engine.connect() as conn:
+                if 'protocol' not in columns:
+                    conn.execute(text("ALTER TABLE iot_devices ADD COLUMN protocol VARCHAR(20)"))
+                    conn.commit()
+                if 'is_secured' not in columns:
+                    conn.execute(text("ALTER TABLE iot_devices ADD COLUMN is_secured BOOLEAN DEFAULT 0"))
+                    conn.commit()
+                if 'bound_key_id' not in columns:
+                    conn.execute(text("ALTER TABLE iot_devices ADD COLUMN bound_key_id INTEGER"))
+                    conn.commit()
+            logger.info("Migrated: iot_devices protocol/security columns")
+
+        if 'cryptographic_keys' in tables:
+            columns = [col['name'] for col in inspector.get_columns('cryptographic_keys')]
+            if 'bound_protocol' not in columns:
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE cryptographic_keys ADD COLUMN bound_protocol VARCHAR(20)"))
+                    conn.commit()
+                logger.info("Migrated: cryptographic_keys bound_protocol column")
+
     except Exception as e:
         logger.warning(f"Schema migration warning (non-fatal): {e}")
 

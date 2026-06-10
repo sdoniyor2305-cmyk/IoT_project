@@ -49,21 +49,27 @@ export const authAPI = {
 export const deviceAPI = {
   create: (deviceData) =>
     api.post('/devices', deviceData),
-  
+
   list: () =>
     api.get('/devices'),
-  
+
   get: (deviceId) =>
     api.get(`/devices/${deviceId}`),
-  
+
   update: (deviceId, deviceData) =>
     api.put(`/devices/${deviceId}`, deviceData),
-  
+
   delete: (deviceId) =>
     api.delete(`/devices/${deviceId}`),
-  
+
   updateStatus: (deviceId, status) =>
     api.post(`/devices/${deviceId}/status`, { status }),
+
+  bindKey: (deviceId, data) =>
+    api.post(`/devices/${deviceId}/bind-key`, data),
+
+  rotateKey: (deviceId) =>
+    api.post(`/devices/${deviceId}/rotate-key`),
 };
 
 // Key APIs
@@ -104,20 +110,41 @@ export const encryptionAPI = {
     api.get(`/crypto/operations/${operationId}`),
 };
 
+// Communication APIs
+export const communicationAPI = {
+  simulate: (data) =>
+    api.post('/communication/simulate', data),
+
+  getHistory: () =>
+    api.get('/communication/history'),
+};
+
 // Analysis APIs
 export const analysisAPI = {
   analyzeEntropy: (analysisData) =>
     api.post('/analysis/entropy', analysisData),
-  
+
   getAlgorithmComparison: () =>
     api.get('/analysis/performance/comparison'),
-  
+
   getDashboardStatistics: () =>
     api.get('/analysis/dashboard/statistics'),
-  
+
+  getIoTOverview: () =>
+    api.get('/analysis/iot-overview'),
+
+  getProtocolComparison: () =>
+    api.get('/analysis/protocols/comparison'),
+
+  getKeyMethodComparison: () =>
+    api.get('/analysis/key-methods/comparison'),
+
+  getSecurityReport: () =>
+    api.get('/analysis/security/report'),
+
   getKeyUsageHistory: (keyId) =>
     api.get(`/analysis/keys/${keyId}/history`),
-  
+
   getAlgorithmStatistics: (algorithm) =>
     api.get(`/analysis/algorithms/${algorithm}/statistics`),
 };

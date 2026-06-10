@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 import logging
 
 # Import routes
-from app.routes import auth_routes, device_routes, key_routes, encryption_routes, analysis_routes, admin_routes
+from app.routes import auth_routes, device_routes, key_routes, encryption_routes, analysis_routes, admin_routes, communication_routes
 from app.utils.database import init_db, create_superadmin
 
 # Configure logging
@@ -34,17 +34,18 @@ logger = logging.getLogger(__name__)
 # Create FastAPI app
 app = FastAPI(
     title="IoT Key Generation Platform",
-    description="Secure key generation and encryption for IoT devices",
-    version="1.0.0",
+    description="Secure key generation and IoT communication simulation",
+    version="2.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
     openapi_tags=[
         {"name": "Authentication", "description": "User registration, login, and token management."},
-        {"name": "Devices", "description": "Manage IoT devices: CRUD and status updates."},
-        {"name": "Keys", "description": "Generate, export, and inspect cryptographic keys."},
-        {"name": "Encryption", "description": "Encryption and decryption operations and operation history."},
-        {"name": "Analysis", "description": "Entropy analysis and algorithm performance statistics."},
+        {"name": "IoT Devices", "description": "Manage IoT devices and bind cryptographic keys."},
+        {"name": "Cryptographic Keys", "description": "Generate, export, and inspect cryptographic keys."},
+        {"name": "Encryption", "description": "Encryption and decryption operations."},
+        {"name": "Communication", "description": "IoT device-to-device communication simulation."},
+        {"name": "Analysis", "description": "Entropy analysis, protocol comparison, and security reports."},
         {"name": "General", "description": "Health checks and basic API information."}
     ]
 )
@@ -63,6 +64,7 @@ app.include_router(auth_routes.router)
 app.include_router(device_routes.router)
 app.include_router(key_routes.router)
 app.include_router(encryption_routes.router)
+app.include_router(communication_routes.router)
 app.include_router(analysis_routes.router)
 app.include_router(admin_routes.router)
 

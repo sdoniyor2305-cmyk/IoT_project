@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Download, Eye, EyeOff } from 'lucide-react';
-import { keyAPI } from '../services/api';
+import { Plus, Trash2, Download, Eye, EyeOff, ShieldCheck, Link, RefreshCw } from 'lucide-react';
+import { keyAPI, deviceAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
+
+const PROTOCOL_COLORS = {
+  mqtt: 'bg-blue-600', coap: 'bg-emerald-600', tls: 'bg-violet-600',
+};
 
 const KeysPage = () => {
   const { t } = useLang();
@@ -173,7 +177,9 @@ const KeysPage = () => {
                 <div>
                   <p className="text-gray-500">{t('keys.status')}</p>
                   <p className="font-semibold">
-                    <span className="badge badge-success">{t('keys.active')}</span>
+                    {key.is_active
+                      ? <span className="badge badge-success">{t('keys.active')}</span>
+                      : <span className="badge badge-error text-xs">Rotated</span>}
                   </p>
                 </div>
                 <div>
@@ -183,6 +189,23 @@ const KeysPage = () => {
                   </p>
                 </div>
               </div>
+
+              {/* Protocol / Device binding info */}
+              {(key.bound_protocol || key.device_name) && (
+                <div className="flex items-center gap-2 mb-3 text-xs">
+                  <ShieldCheck size={13} className="text-green-400 flex-shrink-0" />
+                  {key.bound_protocol && (
+                    <span className={`px-1.5 py-0.5 rounded text-white font-bold uppercase ${PROTOCOL_COLORS[key.bound_protocol] || 'bg-gray-600'}`}>
+                      {key.bound_protocol}
+                    </span>
+                  )}
+                  {key.device_name && (
+                    <span className="flex items-center gap-1 text-gray-400">
+                      <Link size={11} /> bound to <span className="text-white font-medium">{key.device_name}</span>
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded mb-4 overflow-x-auto">
                 <p className="text-xs font-mono text-gray-600 dark:text-gray-300 break-all">

@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 
-from app.models.models import CryptographicKey, AnalysisResult, Operation
+from app.models.models import CryptographicKey, AnalysisResult, Operation, IoTDevice, Communication
 from app.schemas.schemas import (
     AnalysisRequest, EntropyAnalysisResponse, AlgorithmComparisonResponse,
-    DashboardStatisticsResponse
+    DashboardStatisticsResponse, IoTOverviewResponse
 )
 from app.auth.auth import get_current_user
 from app.utils.database import get_db
@@ -273,6 +273,225 @@ def get_key_usage_history(
             for op in operations
         ]
     }
+
+
+@router.get("/iot-overview", response_model=IoTOverviewResponse)
+def get_iot_overview(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """IoT-specific dashboard: protocol distribution, security stats, recent comms."""
+    user_id = int(current_user.get("sub"))
+
+    devices = db.query(IoTDevice).filter(IoTDevice.user_id == user_id).all()
+    total = len(devices)
+    secured = sum(1 for d in devices if d.is_secured)
+    unsecured = total - secured
+    security_score = round((secured / total * 100) if total else 0.0, 1)
+
+    proto_dist = {"mqtt": 0, "coap": 0, "tls": 0}
+    for d in devices:
+        if d.is_secured and d.protocol and d.protocol in proto_dist:
+            proto_dist[d.protocol] += 1
+
+    keys = db.query(CryptographicKey).filter(CryptographicKey.user_id == user_id).all()
+    method_dist = {"drbg": 0, "trng": 0, "puf": 0}
+    for k in keys:
+        m = (k.generation_method or "").lower()
+        if m in method_dist:
+            method_dist[m] += 1
+
+    total_comms = db.query(Communication).filter(Communication.user_id == user_id).count()
+    recent = (
+        db.query(Communication)
+        .filter(Communication.user_id == user_id)
+        .order_by(Communication.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    recent_list = [
+        {
+            "comm_id": c.comm_id,
+            "source": c.source_device.device_name if c.source_device else "?",
+            "target": c.target_device.device_name if c.target_device else "?",
+            "protocol": c.protocol,
+            "algorithm": c.algorithm,
+            "transmission_time_ms": c.transmission_time_ms,
+            "created_at": c.created_at.isoformat(),
+        }
+        for c in recent
+    ]
+
+    return IoTOverviewResponse(
+        total_devices=total,
+        secured_devices=secured,
+        unsecured_devices=unsecured,
+        security_score=security_score,
+        protocol_distribution=proto_dist,
+        key_method_distribution=method_dist,
+        total_communications=total_comms,
+        recent_communications=recent_list,
+    )
+
+
+@router.get("/protocols/comparison")
+def get_protocol_comparison(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return average latency/performance by protocol from communication history."""
+    user_id = int(current_user.get("sub"))
+
+    comms = db.query(Communication).filter(Communication.user_id == user_id).all()
+
+    # Group by protocol
+    data: dict = {}
+    for c in comms:
+        p = c.protocol or "mqtt"
+        if p not in data:
+            data[p] = {"transmission": [], "encryption": [], "decryption": [], "total": [], "count": 0}
+        data[p]["transmission"].append(c.transmission_time_ms or 0)
+        data[p]["encryption"].append(c.encryption_time_ms or 0)
+        data[p]["decryption"].append(c.decryption_time_ms or 0)
+        total = (c.transmission_time_ms or 0) + (c.encryption_time_ms or 0) + (c.decryption_time_ms or 0)
+        data[p]["total"].append(total)
+        data[p]["count"] += 1
+
+    # Fall back to typical benchmark values when no real data exists
+    defaults = {
+        "mqtt": {"avg_transmission": 11.5, "avg_total": 12.0, "overhead_pct": 12},
+        "coap": {"avg_transmission": 7.0,  "avg_total": 7.5,  "overhead_pct": 8},
+        "tls":  {"avg_transmission": 35.0, "avg_total": 36.0, "overhead_pct": 30},
+    }
+
+    result = []
+    for proto in ["mqtt", "coap", "tls"]:
+        if proto in data and data[proto]["count"] > 0:
+            d = data[proto]
+            avg = lambda lst: round(sum(lst) / len(lst), 3) if lst else 0
+            result.append({
+                "protocol": proto.upper(),
+                "avg_transmission_ms": avg(d["transmission"]),
+                "avg_encryption_ms": avg(d["encryption"]),
+                "avg_decryption_ms": avg(d["decryption"]),
+                "avg_total_ms": avg(d["total"]),
+                "count": d["count"],
+                "source": "measured",
+            })
+        else:
+            def_val = defaults[proto]
+            result.append({
+                "protocol": proto.upper(),
+                "avg_transmission_ms": def_val["avg_transmission"],
+                "avg_encryption_ms": 0.15,
+                "avg_decryption_ms": 0.10,
+                "avg_total_ms": def_val["avg_total"],
+                "count": 0,
+                "source": "simulated_baseline",
+            })
+
+    return result
+
+
+@router.get("/key-methods/comparison")
+def get_key_method_comparison(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return entropy and performance comparison for key generation methods."""
+    user_id = int(current_user.get("sub"))
+
+    keys = db.query(CryptographicKey).filter(CryptographicKey.user_id == user_id).all()
+
+    data: dict = {}
+    for k in keys:
+        m = (k.generation_method or "drbg").lower()
+        if m not in data:
+            data[m] = {"entropy": [], "randomness": []}
+        if k.shannon_entropy is not None:
+            data[m]["entropy"].append(k.shannon_entropy)
+        if k.randomness_score is not None:
+            data[m]["randomness"].append(k.randomness_score)
+
+    # Baseline characteristics per method
+    baselines = {
+        "drbg": {"speed_ms": 0.3, "entropy_typical": 7.7, "randomness_typical": 96.0},
+        "trng": {"speed_ms": 4.5, "entropy_typical": 7.95, "randomness_typical": 99.4},
+        "puf":  {"speed_ms": 0.7, "entropy_typical": 6.8, "randomness_typical": 85.0},
+    }
+
+    result = []
+    for method in ["drbg", "trng", "puf"]:
+        b = baselines[method]
+        avg_entropy = (
+            round(sum(data[method]["entropy"]) / len(data[method]["entropy"]), 4)
+            if method in data and data[method]["entropy"]
+            else b["entropy_typical"]
+        )
+        avg_randomness = (
+            round(sum(data[method]["randomness"]) / len(data[method]["randomness"]), 2)
+            if method in data and data[method]["randomness"]
+            else b["randomness_typical"]
+        )
+        result.append({
+            "method": method.upper(),
+            "avg_entropy": avg_entropy,
+            "avg_randomness_score": avg_randomness,
+            "generation_speed_ms": b["speed_ms"],
+            "key_count": len(data.get(method, {}).get("entropy", [])),
+            "security_level": "High" if method == "trng" else ("Medium" if method == "drbg" else "Device-tied"),
+        })
+
+    return result
+
+
+@router.get("/security/report")
+def get_security_report(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return per-device security status report."""
+    user_id = int(current_user.get("sub"))
+
+    devices = db.query(IoTDevice).filter(IoTDevice.user_id == user_id).all()
+
+    report = []
+    for d in devices:
+        key_info = None
+        if d.bound_key_id:
+            k = db.query(CryptographicKey).filter(CryptographicKey.id == d.bound_key_id).first()
+            if k:
+                key_info = {
+                    "key_id": k.key_id[:16] + "...",
+                    "algorithm": k.algorithm_used,
+                    "method": k.generation_method.upper(),
+                    "length_bits": k.key_length_bits,
+                    "randomness_score": round(k.randomness_score or 0, 1),
+                    "shannon_entropy": round(k.shannon_entropy or 0, 4),
+                }
+
+        comm_count = db.query(Communication).filter(
+            (Communication.source_device_id == d.id) | (Communication.target_device_id == d.id),
+            Communication.user_id == user_id,
+        ).count()
+
+        report.append({
+            "device_id": d.id,
+            "device_name": d.device_name,
+            "device_type": d.device_type,
+            "status": d.status,
+            "is_secured": d.is_secured,
+            "protocol": (d.protocol or "").upper() if d.protocol else None,
+            "key_info": key_info,
+            "communications": comm_count,
+            "security_grade": (
+                "A" if d.is_secured and key_info and key_info["randomness_score"] >= 90
+                else "B" if d.is_secured
+                else "F"
+            ),
+        })
+
+    return report
 
 
 @router.get("/algorithms/{algorithm}/statistics")

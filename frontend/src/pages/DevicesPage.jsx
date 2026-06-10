@@ -1,29 +1,378 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Activity, Clock } from 'lucide-react';
+import {
+  Plus, Trash2, Activity, ShieldCheck, ShieldOff, RefreshCw,
+  Cpu, MemoryStick, Wifi, WifiOff, AlertTriangle, X, ChevronRight, ChevronLeft, Key
+} from 'lucide-react';
 import { deviceAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
 
 const STATUS_CYCLE = ['online', 'offline', 'error'];
 
 const getStatusConfig = (status) => {
-  if (status === 'online') return { color: '#10b981', bg: 'bg-green-500', label: 'Online', textClass: 'text-green-600 dark:text-green-400' };
-  if (status === 'error') return { color: '#f59e0b', bg: 'bg-yellow-500', label: 'Error', textClass: 'text-yellow-600 dark:text-yellow-400' };
-  return { color: '#ef4444', bg: 'bg-red-500', label: 'Offline', textClass: 'text-red-600 dark:text-red-400' };
+  if (status === 'online') return { color: 'bg-green-500', text: 'text-green-400', label: 'Online', icon: Wifi };
+  if (status === 'error') return { color: 'bg-yellow-500', text: 'text-yellow-400', label: 'Error', icon: AlertTriangle };
+  return { color: 'bg-red-500', text: 'text-red-400', label: 'Offline', icon: WifiOff };
+};
+
+const PROTOCOL_INFO = {
+  mqtt: { label: 'MQTT', color: 'bg-blue-600', desc: 'Lightweight pub/sub — best for sensors', latency: '8–15ms' },
+  coap: { label: 'CoAP', color: 'bg-emerald-600', desc: 'UDP-based, minimal overhead', latency: '4–10ms' },
+  tls:  { label: 'TLS', color: 'bg-violet-600', desc: 'Full TLS security, higher overhead', latency: '25–45ms' },
+};
+
+const METHOD_INFO = {
+  drbg: { label: 'DRBG', color: 'bg-blue-700', desc: 'Deterministic — fast, reproducible', entropy: '~96%' },
+  trng: { label: 'TRNG', color: 'bg-green-700', desc: 'True random — highest entropy', entropy: '~99%' },
+  puf:  { label: 'PUF', color: 'bg-orange-700', desc: 'Device-unique unclonable key', entropy: '~85%' },
+};
+
+const LENGTH_INFO = {
+  64:  { label: '64-bit', color: 'bg-gray-700', desc: 'Ultra-lightweight IoT devices' },
+  128: { label: '128-bit', color: 'bg-blue-700', desc: 'Standard security (recommended)' },
+  256: { label: '256-bit', color: 'bg-purple-700', desc: 'Maximum security' },
+};
+
+const ALGO_INFO = {
+  AES:   { label: 'AES', color: 'bg-blue-700', desc: 'Industry standard, well-tested' },
+  ASCON: { label: 'ASCON', color: 'bg-green-700', desc: 'Lightweight authenticated encryption' },
+  SPECK: { label: 'SPECK', color: 'bg-orange-700', desc: 'Ultra-lightweight block cipher' },
 };
 
 const formatLastSeen = (lastSeen) => {
   if (!lastSeen) return 'Never';
-  const date = new Date(lastSeen);
-  const now = new Date();
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
+  const diffMins = Math.floor((new Date() - new Date(lastSeen)) / 60000);
   if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
+  const h = Math.floor(diffMins / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+};
+
+const BindKeyModal = ({ device, onClose, onSuccess }) => {
+  const { t } = useLang();
+  const [step, setStep] = useState(1); // 1-4
+  const [form, setForm] = useState({ protocol: '', method: '', length: 128, algorithm: 'AES' });
+  const [binding, setBinding] = useState(false);
+  const [bindResult, setBindResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const stepsValid = [
+    true,
+    !!form.protocol,
+    !!form.method,
+    !!form.algorithm,
+  ];
+
+  const handleBind = async () => {
+    setBinding(true);
+    setError('');
+    try {
+      const res = await deviceAPI.bindKey(device.id, {
+        protocol: form.protocol,
+        generation_method: form.method,
+        key_length_bits: form.length,
+        algorithm: form.algorithm,
+      });
+      setBindResult(res);
+      onSuccess(res);
+    } catch (e) {
+      setError(e?.detail || 'Failed to bind key');
+    } finally {
+      setBinding(false);
+    }
+  };
+
+  if (bindResult) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+        <div className="bg-gray-900 border border-green-700 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+          <div className="text-center mb-4">
+            <ShieldCheck size={48} className="mx-auto text-green-400 mb-2" />
+            <h2 className="text-xl font-bold text-white">{t('devices.bindSuccess')}</h2>
+          </div>
+          <div className="space-y-2 text-sm bg-gray-800 rounded-xl p-4 mb-4">
+            <div className="flex justify-between">
+              <span className="text-gray-400">Device</span>
+              <span className="text-white font-medium">{bindResult.device_name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Protocol</span>
+              <span className={`font-bold uppercase text-white px-2 py-0.5 rounded text-xs ${PROTOCOL_INFO[bindResult.protocol]?.color || 'bg-gray-600'}`}>
+                {bindResult.protocol?.toUpperCase()}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Algorithm</span>
+              <span className="text-white">{bindResult.algorithm}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Method</span>
+              <span className="text-white">{(bindResult.generation_method || '').toUpperCase()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Key Length</span>
+              <span className="text-white">{bindResult.key_length_bits}-bit</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Entropy Score</span>
+              <span className="text-green-400 font-bold">{bindResult.randomness_score?.toFixed(1)}%</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mb-4 font-mono break-all">
+            Key: {bindResult.key_hex?.slice(0, 32)}...
+          </p>
+          <button onClick={onClose} className="btn btn-primary w-full">Done</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full shadow-2xl">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Key size={20} className="text-blue-400" /> Bind Key to {device.device_name}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={20} /></button>
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex items-center gap-2 mb-6">
+          {[1,2,3,4].map(s => (
+            <React.Fragment key={s}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
+                ${s < step ? 'bg-green-600 text-white' : s === step ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}>
+                {s < step ? '✓' : s}
+              </div>
+              {s < 4 && <div className={`flex-1 h-1 rounded ${s < step ? 'bg-green-600' : 'bg-gray-700'}`} />}
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Step 1: Protocol */}
+        {step === 1 && (
+          <div>
+            <h3 className="font-semibold text-white mb-3">{t('devices.bindStep1')}</h3>
+            <div className="grid gap-3">
+              {Object.entries(PROTOCOL_INFO).map(([key, info]) => (
+                <button
+                  key={key}
+                  onClick={() => setForm(f => ({ ...f, protocol: key }))}
+                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left
+                    ${form.protocol === key ? `border-blue-500 ${info.color} bg-opacity-30` : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
+                >
+                  <div>
+                    <span className={`font-bold text-white px-2 py-0.5 rounded text-sm ${info.color} mr-2`}>{info.label}</span>
+                    <span className="text-gray-300 text-sm">{info.desc}</span>
+                  </div>
+                  <span className="text-xs text-gray-400 ml-2">{info.latency}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Method */}
+        {step === 2 && (
+          <div>
+            <h3 className="font-semibold text-white mb-3">{t('devices.bindStep2')}</h3>
+            <div className="grid gap-3">
+              {Object.entries(METHOD_INFO).map(([key, info]) => (
+                <button
+                  key={key}
+                  onClick={() => setForm(f => ({ ...f, method: key }))}
+                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left
+                    ${form.method === key ? `border-blue-500 ${info.color} bg-opacity-30` : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
+                >
+                  <div>
+                    <span className={`font-bold text-white px-2 py-0.5 rounded text-sm ${info.color} mr-2`}>{info.label}</span>
+                    <span className="text-gray-300 text-sm">{info.desc}</span>
+                  </div>
+                  <span className="text-xs text-green-400 font-mono">{info.entropy}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Key Length */}
+        {step === 3 && (
+          <div>
+            <h3 className="font-semibold text-white mb-3">{t('devices.bindStep3')}</h3>
+            <div className="grid gap-3">
+              {Object.entries(LENGTH_INFO).map(([bits, info]) => (
+                <button
+                  key={bits}
+                  onClick={() => setForm(f => ({ ...f, length: parseInt(bits) }))}
+                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left
+                    ${form.length === parseInt(bits) ? `border-blue-500 ${info.color} bg-opacity-30` : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
+                >
+                  <span className="font-bold text-white">{info.label}</span>
+                  <span className="text-gray-400 text-sm">{info.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Algorithm + Generate */}
+        {step === 4 && (
+          <div>
+            <h3 className="font-semibold text-white mb-3">{t('devices.bindStep4')}</h3>
+            <div className="grid gap-3 mb-4">
+              {Object.entries(ALGO_INFO).map(([key, info]) => (
+                <button
+                  key={key}
+                  onClick={() => setForm(f => ({ ...f, algorithm: key }))}
+                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left
+                    ${form.algorithm === key ? `border-blue-500 ${info.color} bg-opacity-30` : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
+                >
+                  <span className={`font-bold text-white px-2 py-0.5 rounded text-sm ${info.color} mr-2`}>{info.label}</span>
+                  <span className="text-gray-400 text-sm">{info.desc}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Summary */}
+            <div className="bg-gray-800 rounded-xl p-3 text-sm mb-3 space-y-1">
+              <div className="flex gap-2 flex-wrap">
+                <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${PROTOCOL_INFO[form.protocol]?.color}`}>{form.protocol?.toUpperCase()}</span>
+                <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${METHOD_INFO[form.method]?.color}`}>{form.method?.toUpperCase()}</span>
+                <span className="px-2 py-0.5 rounded text-xs font-bold text-white bg-gray-600">{form.length}-bit</span>
+                <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${ALGO_INFO[form.algorithm]?.color}`}>{form.algorithm}</span>
+              </div>
+            </div>
+
+            {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+
+            <button
+              onClick={handleBind}
+              disabled={binding}
+              className="btn btn-primary w-full gap-2"
+            >
+              {binding ? <><RefreshCw size={16} className="animate-spin" /> Generating...</> : <><ShieldCheck size={16} /> {t('devices.bindGenerate')}</>}
+            </button>
+          </div>
+        )}
+
+        {/* Navigation */}
+        {!bindResult && (
+          <div className="flex gap-3 mt-4">
+            {step > 1 && (
+              <button onClick={() => setStep(s => s - 1)} className="btn btn-ghost flex-1 gap-1">
+                <ChevronLeft size={16} /> Back
+              </button>
+            )}
+            {step < 4 && (
+              <button
+                onClick={() => setStep(s => s + 1)}
+                disabled={!stepsValid[step]}
+                className="btn btn-primary flex-1 gap-1"
+              >
+                Next <ChevronRight size={16} />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const DeviceCard = ({ device, onDelete, onSimulateStatus, onBindKey, onRotateKey }) => {
+  const statusCfg = getStatusConfig(device.status);
+  const StatusIcon = statusCfg.icon;
+  const proto = PROTOCOL_INFO[device.protocol];
+
+  return (
+    <div className="card relative hover:shadow-lg transition-shadow duration-200">
+      {/* Security badge */}
+      <div className={`absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold
+        ${device.is_secured ? 'bg-green-900 text-green-300 border border-green-700' : 'bg-red-900 text-red-300 border border-red-800'}`}>
+        {device.is_secured ? <ShieldCheck size={12} /> : <ShieldOff size={12} />}
+        {device.is_secured ? 'SECURED' : 'UNSECURED'}
+      </div>
+
+      {/* Header */}
+      <div className="mb-3 pr-24">
+        <h3 className="font-bold text-gray-900 dark:text-white text-lg leading-tight">{device.device_name}</h3>
+        <p className="text-xs text-gray-400 font-mono mt-0.5">{device.device_id}</p>
+      </div>
+
+      {/* Status + Protocol */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-1.5">
+          <span className={`w-2.5 h-2.5 rounded-full ${statusCfg.color} ${device.status === 'online' ? 'animate-pulse' : ''}`} />
+          <span className={`text-sm font-medium ${statusCfg.text}`}>{statusCfg.label}</span>
+        </div>
+        {device.protocol && proto && (
+          <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${proto.color}`}>
+            {proto.label}
+          </span>
+        )}
+        <span className="text-xs text-gray-500 capitalize bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+          {device.device_type}
+        </span>
+      </div>
+
+      {/* Specs */}
+      {(device.cpu_type || device.memory_kb) && (
+        <div className="flex gap-3 mb-3 text-xs text-gray-500 dark:text-gray-400">
+          {device.cpu_type && (
+            <span className="flex items-center gap-1"><Cpu size={11} /> {device.cpu_type}</span>
+          )}
+          {device.memory_kb && (
+            <span className="flex items-center gap-1"><MemoryStick size={11} /> {device.memory_kb}KB RAM</span>
+          )}
+        </div>
+      )}
+
+      {/* Key info (if secured) */}
+      {device.is_secured && device.bound_key_id && (
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <span className="flex items-center gap-1">
+            <Key size={11} className="text-green-400" />
+            Key ID: {device.bound_key_id} bound via {(device.protocol || '').toUpperCase()}
+          </span>
+        </div>
+      )}
+
+      <div className="text-xs text-gray-400 mb-3">Last seen: {device.last_seen ? formatLastSeen(device.last_seen) : 'Never'}</div>
+
+      {/* Actions */}
+      <div className="flex gap-2 flex-wrap">
+        {!device.is_secured ? (
+          <button
+            onClick={onBindKey}
+            className="btn btn-primary flex-1 text-xs py-1.5 gap-1"
+          >
+            <Key size={14} /> Bind Key
+          </button>
+        ) : (
+          <button
+            onClick={onRotateKey}
+            className="btn text-xs py-1.5 gap-1 flex-1 border border-blue-600 text-blue-400 hover:bg-blue-900 hover:bg-opacity-20"
+          >
+            <RefreshCw size={14} /> Rotate Key
+          </button>
+        )}
+        <button
+          onClick={onSimulateStatus}
+          className="btn btn-ghost text-xs py-1.5 px-2"
+          title="Cycle status"
+        >
+          <Activity size={14} />
+        </button>
+        <button
+          onClick={onDelete}
+          className="btn text-xs py-1.5 px-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900 dark:hover:bg-opacity-20"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
 };
 
 const DevicesPage = () => {
@@ -31,15 +380,11 @@ const DevicesPage = () => {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [bindDevice, setBindDevice] = useState(null);
+  const [rotatingId, setRotatingId] = useState(null);
   const [formData, setFormData] = useState({
-    device_id: '',
-    device_name: '',
-    device_type: 'sensor',
-    manufacturer: '',
-    model: '',
-    cpu_type: '',
-    memory_kb: '',
-    storage_kb: '',
+    device_id: '', device_name: '', device_type: 'sensor',
+    manufacturer: '', model: '', cpu_type: '', memory_kb: '', storage_kb: '',
   });
 
   useEffect(() => {
@@ -52,8 +397,8 @@ const DevicesPage = () => {
     try {
       const data = await deviceAPI.list();
       setDevices(data);
-    } catch (error) {
-      console.error('Failed to load devices:', error);
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -73,273 +418,152 @@ const DevicesPage = () => {
         storage_kb: formData.storage_kb ? parseInt(formData.storage_kb, 10) : null,
       };
       const newDevice = await deviceAPI.create(payload);
-      setDevices([...devices, newDevice]);
-      setFormData({
-        device_id: '', device_name: '', device_type: 'sensor',
-        manufacturer: '', model: '', cpu_type: '', memory_kb: '', storage_kb: '',
-      });
+      setDevices(prev => [...prev, newDevice]);
+      setFormData({ device_id: '', device_name: '', device_type: 'sensor', manufacturer: '', model: '', cpu_type: '', memory_kb: '', storage_kb: '' });
       setShowForm(false);
-    } catch (error) {
-      console.error('Failed to create device:', error);
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const handleDeleteDevice = async (deviceId) => {
-    if (confirm(t('devices.deleteConfirm'))) {
-      try {
-        await deviceAPI.delete(deviceId);
-        setDevices(devices.filter(d => d.id !== deviceId));
-      } catch (error) {
-        console.error('Failed to delete device:', error);
-      }
-    }
-  };
-
-  const handleChangeStatus = async (deviceId, newStatus) => {
+  const handleDelete = async (deviceId) => {
+    if (!confirm(t('devices.deleteConfirm'))) return;
     try {
-      await deviceAPI.updateStatus(deviceId, newStatus);
-      setDevices(devices.map(d =>
-        d.id === deviceId ? { ...d, status: newStatus, last_seen: new Date().toISOString() } : d
-      ));
-    } catch (error) {
-      console.error('Failed to update status:', error);
+      await deviceAPI.delete(deviceId);
+      setDevices(prev => prev.filter(d => d.id !== deviceId));
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const handleSimulateStatus = (device) => {
-    const currentIdx = STATUS_CYCLE.indexOf(device.status);
-    const nextStatus = STATUS_CYCLE[(currentIdx + 1) % STATUS_CYCLE.length];
-    handleChangeStatus(device.id, nextStatus);
+  const handleSimulateStatus = async (device) => {
+    const idx = STATUS_CYCLE.indexOf(device.status);
+    const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+    try {
+      await deviceAPI.updateStatus(device.id, next);
+      setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: next, last_seen: new Date().toISOString() } : d));
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const onlineCount = devices.filter(d => d.status === 'online').length;
-  const offlineCount = devices.filter(d => d.status === 'offline').length;
-  const errorCount = devices.filter(d => d.status === 'error').length;
+  const handleRotateKey = async (device) => {
+    if (!confirm(`Rotate key for ${device.device_name}? A new key will be generated.`)) return;
+    setRotatingId(device.id);
+    try {
+      await deviceAPI.rotateKey(device.id);
+      await loadDevices();
+    } catch (e) {
+      alert(e?.detail || 'Rotation failed');
+    } finally {
+      setRotatingId(null);
+    }
+  };
+
+  const handleBindSuccess = async () => {
+    await loadDevices();
+    setBindDevice(null);
+  };
+
+  const securedCount = devices.filter(d => d.is_secured).length;
+  const unsecuredCount = devices.length - securedCount;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('devices.title')}</h1>
-          <p className="text-gray-600 dark:text-gray-400">{t('devices.subtitle')}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t('devices.subtitle')}</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="btn btn-primary gap-2">
-          <Plus size={20} /> {t('devices.addBtn')}
+        <button onClick={() => setShowForm(v => !v)} className="btn btn-primary gap-2">
+          <Plus size={18} /> {t('devices.addBtn')}
         </button>
       </div>
 
-      {/* Status Summary */}
+      {/* Security summary */}
       {devices.length > 0 && (
         <div className="grid grid-cols-3 gap-4">
           <div className="card-hover text-center py-4">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <span className="w-3 h-3 rounded-full bg-green-500 inline-block"></span>
-              <span className="text-2xl font-bold text-green-600 dark:text-green-400">{onlineCount}</span>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Online</p>
+            <p className="text-2xl font-bold text-blue-400">{devices.length}</p>
+            <p className="text-sm text-gray-500 mt-1">Total Devices</p>
           </div>
           <div className="card-hover text-center py-4">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <span className="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
-              <span className="text-2xl font-bold text-red-600 dark:text-red-400">{offlineCount}</span>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Offline</p>
+            <p className="text-2xl font-bold text-green-400">{securedCount}</p>
+            <p className="text-sm text-gray-500 mt-1">{t('devices.secured')}</p>
           </div>
           <div className="card-hover text-center py-4">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <span className="w-3 h-3 rounded-full bg-yellow-500 inline-block"></span>
-              <span className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{errorCount}</span>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Error</p>
+            <p className="text-2xl font-bold text-red-400">{unsecuredCount}</p>
+            <p className="text-sm text-gray-500 mt-1">{t('devices.unsecured')}</p>
           </div>
         </div>
       )}
 
+      {/* Create form */}
       {showForm && (
         <div className="card">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('devices.createTitle')}</h2>
           <form onSubmit={handleCreateDevice} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('devices.deviceId')}
-              </label>
-              <input
-                type="text"
-                value={formData.device_id}
-                onChange={(e) => setFormData({ ...formData, device_id: e.target.value })}
-                className="input"
-                placeholder={t('devices.deviceIdPlaceholder')}
-                required
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('devices.deviceId')}</label>
+              <input type="text" value={formData.device_id} onChange={e => setFormData({ ...formData, device_id: e.target.value })} className="input" placeholder={t('devices.deviceIdPlaceholder')} required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('devices.deviceName')}
-              </label>
-              <input
-                type="text"
-                value={formData.device_name}
-                onChange={(e) => setFormData({ ...formData, device_name: e.target.value })}
-                className="input"
-                placeholder={t('devices.deviceNamePlaceholder')}
-                required
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('devices.deviceName')}</label>
+              <input type="text" value={formData.device_name} onChange={e => setFormData({ ...formData, device_name: e.target.value })} className="input" placeholder={t('devices.deviceNamePlaceholder')} required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('devices.type')}
-              </label>
-              <select
-                value={formData.device_type}
-                onChange={(e) => setFormData({ ...formData, device_type: e.target.value })}
-                className="input"
-              >
-                <option>sensor</option>
-                <option>actuator</option>
-                <option>gateway</option>
-                <option>controller</option>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('devices.type')}</label>
+              <select value={formData.device_type} onChange={e => setFormData({ ...formData, device_type: e.target.value })} className="input">
+                <option>sensor</option><option>actuator</option><option>gateway</option><option>controller</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('devices.manufacturer')}
-              </label>
-              <input
-                type="text"
-                value={formData.manufacturer}
-                onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
-                className="input"
-                placeholder={t('devices.manufacturerPlaceholder')}
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('devices.cpuType')}</label>
+              <input type="text" value={formData.cpu_type} onChange={e => setFormData({ ...formData, cpu_type: e.target.value })} className="input" placeholder="e.g., ARM Cortex-M0" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('devices.model')}
-              </label>
-              <input
-                type="text"
-                value={formData.model}
-                onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                className="input"
-                placeholder="e.g., TMP36"
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('devices.memory')}</label>
+              <input type="number" value={formData.memory_kb} onChange={e => setFormData({ ...formData, memory_kb: e.target.value })} className="input" placeholder="e.g., 32" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('devices.cpuType')}
-              </label>
-              <input
-                type="text"
-                value={formData.cpu_type}
-                onChange={(e) => setFormData({ ...formData, cpu_type: e.target.value })}
-                className="input"
-                placeholder="e.g., ARM Cortex-M0"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('devices.memory')}
-              </label>
-              <input
-                type="number"
-                value={formData.memory_kb}
-                onChange={(e) => setFormData({ ...formData, memory_kb: e.target.value })}
-                className="input"
-                placeholder="e.g., 32"
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('devices.manufacturer')}</label>
+              <input type="text" value={formData.manufacturer} onChange={e => setFormData({ ...formData, manufacturer: e.target.value })} className="input" placeholder={t('devices.manufacturerPlaceholder')} />
             </div>
             <div className="md:col-span-2 flex gap-4">
-              <button type="submit" className="btn btn-primary flex-1">
-                {t('devices.createBtn')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="btn btn-ghost flex-1"
-              >
-                {t('common.cancel')}
-              </button>
+              <button type="submit" className="btn btn-primary flex-1">{t('devices.createBtn')}</button>
+              <button type="button" onClick={() => setShowForm(false)} className="btn btn-ghost flex-1">{t('common.cancel')}</button>
             </div>
           </form>
         </div>
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">{t('devices.loading')}</div>
+        <div className="text-center py-16 text-gray-500">{t('devices.loading')}</div>
       ) : devices.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-gray-500 dark:text-gray-400">{t('devices.empty')}</p>
+        <div className="card text-center py-16">
+          <p className="text-gray-500">{t('devices.empty')}</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">Device ID</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">{t('devices.name')}</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">{t('devices.type')}</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">{t('devices.status')}</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">
-                  <span className="flex items-center gap-1"><Clock size={14} /> Last Seen</span>
-                </th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">{t('devices.memory')}</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">{t('devices.actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {devices.map((device) => {
-                const statusCfg = getStatusConfig(device.status);
-                return (
-                  <tr key={device.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td className="py-4 px-4 text-gray-900 dark:text-white font-mono text-sm">{device.device_id}</td>
-                    <td className="py-4 px-4 text-gray-900 dark:text-white">{device.device_name}</td>
-                    <td className="py-4 px-4">
-                      <span className="badge badge-info">{device.device_type}</span>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`w-3 h-3 rounded-full inline-block ${statusCfg.bg} animate-pulse`}
-                          style={{ animationDuration: device.status === 'online' ? '2s' : 'none' }}
-                        ></span>
-                        <span className={`font-medium text-sm ${statusCfg.textClass}`}>
-                          {statusCfg.label}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-gray-500 dark:text-gray-400 text-sm">
-                      {formatLastSeen(device.last_seen)}
-                    </td>
-                    <td className="py-4 px-4 text-gray-600 dark:text-gray-400">
-                      {device.memory_kb ? `${device.memory_kb} KB` : 'N/A'}
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleSimulateStatus(device)}
-                          className="btn btn-ghost p-2 text-xs flex items-center gap-1"
-                          title="Simulate next status"
-                        >
-                          <Activity size={16} />
-                          <span className="hidden sm:inline">Simulate</span>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteDevice(device.id)}
-                          className="btn text-red-600 hover:bg-red-50 dark:hover:bg-red-900 p-2"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <p className="text-xs text-gray-400 dark:text-gray-600 mt-2 px-4">
-            Auto-refreshes every 10 seconds
-          </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {devices.map(device => (
+            <DeviceCard
+              key={device.id}
+              device={rotatingId === device.id ? { ...device } : device}
+              onDelete={() => handleDelete(device.id)}
+              onSimulateStatus={() => handleSimulateStatus(device)}
+              onBindKey={() => setBindDevice(device)}
+              onRotateKey={() => handleRotateKey(device)}
+            />
+          ))}
         </div>
+      )}
+
+      {bindDevice && (
+        <BindKeyModal
+          device={bindDevice}
+          onClose={() => setBindDevice(null)}
+          onSuccess={handleBindSuccess}
+        />
       )}
     </div>
   );

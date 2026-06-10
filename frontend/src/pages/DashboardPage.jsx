@@ -3,9 +3,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { Smartphone, Key, Lock, TrendingUp, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
+import { Smartphone, Key, TrendingUp, Wifi, WifiOff, AlertTriangle, ShieldCheck, ShieldOff, Radio, Activity } from 'lucide-react';
 import { analysisAPI, deviceAPI, keyAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
+
+const PROTO_COLORS = { mqtt: '#3b82f6', coap: '#10b981', tls: '#8b5cf6' };
 
 const PIE_COLORS = ['#3b82f6', '#10b981', '#8b5cf6'];
 const TOOLTIP_STYLE = { backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#f9fafb' };
@@ -19,74 +21,49 @@ const getStatusConfig = (status) => {
 const DashboardPage = () => {
   const { t } = useLang();
   const [stats, setStats] = useState(null);
+  const [iotOverview, setIotOverview] = useState(null);
   const [algorithmComparison, setAlgorithmComparison] = useState(null);
   const [devices, setDevices] = useState([]);
   const [keyMethodData, setKeyMethodData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const loadKeyMethods = async () => {
+  const loadAll = async () => {
     try {
-      const keysData = await keyAPI.list();
-      const counts = { DRBG: 0, TRNG: 0, PUF: 0 };
-      keysData.forEach(k => {
-        const m = (k.generation_method || '').toUpperCase();
-        if (m in counts) counts[m]++;
-      });
-      if (keysData.length > 0) {
+      const [statsData, compData, devData, overview] = await Promise.all([
+        analysisAPI.getDashboardStatistics(),
+        analysisAPI.getAlgorithmComparison().catch(() => []),
+        deviceAPI.list(),
+        analysisAPI.getIoTOverview().catch(() => null),
+      ]);
+      setStats(statsData);
+      setAlgorithmComparison(compData);
+      setDevices(devData);
+      if (overview) {
+        setIotOverview(overview);
+        const md = overview.key_method_distribution || {};
         setKeyMethodData([
-          { name: 'DRBG', value: counts.DRBG },
-          { name: 'TRNG', value: counts.TRNG },
-          { name: 'PUF', value: counts.PUF },
+          { name: 'DRBG', value: md.drbg || 0 },
+          { name: 'TRNG', value: md.trng || 0 },
+          { name: 'PUF',  value: md.puf  || 0 },
         ]);
       } else {
-        setKeyMethodData([
-          { name: 'DRBG', value: 4 },
-          { name: 'TRNG', value: 3 },
-          { name: 'PUF', value: 5 },
-        ]);
+        // Fallback from raw keys
+        const keysData = await keyAPI.list().catch(() => []);
+        const counts = { DRBG: 0, TRNG: 0, PUF: 0 };
+        keysData.forEach(k => { const m = (k.generation_method||'').toUpperCase(); if (m in counts) counts[m]++; });
+        setKeyMethodData([{ name:'DRBG', value:counts.DRBG }, { name:'TRNG', value:counts.TRNG }, { name:'PUF', value:counts.PUF }]);
       }
-    } catch {
-      setKeyMethodData([
-        { name: 'DRBG', value: 4 },
-        { name: 'TRNG', value: 3 },
-        { name: 'PUF', value: 5 },
-      ]);
+    } catch (error) {
+      console.error('Failed to load dashboard:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        const [statsData, comparisonData, devicesData] = await Promise.all([
-          analysisAPI.getDashboardStatistics(),
-          analysisAPI.getAlgorithmComparison(),
-          deviceAPI.list(),
-        ]);
-        setStats(statsData);
-        setAlgorithmComparison(comparisonData);
-        setDevices(devicesData);
-      } catch (error) {
-        console.error('Failed to load dashboard data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadDashboardData();
-    loadKeyMethods();
-
-    // Auto-refresh device status every 10 seconds
-    const statusInterval = setInterval(async () => {
-      try {
-        const devicesData = await deviceAPI.list();
-        setDevices(devicesData);
-        const statsData = await analysisAPI.getDashboardStatistics();
-        setStats(statsData);
-      } catch (error) {
-        console.error('Auto-refresh failed:', error);
-      }
-    }, 10000);
-
-    return () => clearInterval(statusInterval);
+    loadAll();
+    const interval = setInterval(loadAll, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   if (loading) {
@@ -119,17 +96,17 @@ const DashboardPage = () => {
           color="blue"
         />
         <StatCard
+          icon={ShieldCheck}
+          title="Secured Devices"
+          value={iotOverview?.secured_devices ?? 0}
+          subtitle={`Score: ${iotOverview?.security_score ?? 0}%`}
+          color="green"
+        />
+        <StatCard
           icon={Key}
           title={t('dashboard.totalKeys')}
           value={stats?.total_keys || 0}
           subtitle={t('dashboard.generatedKeys')}
-          color="green"
-        />
-        <StatCard
-          icon={Lock}
-          title={t('dashboard.operations')}
-          value={stats?.total_operations || 0}
-          subtitle={t('dashboard.totalEncryptions')}
           color="purple"
         />
         <StatCard
@@ -140,6 +117,107 @@ const DashboardPage = () => {
           color="yellow"
         />
       </div>
+
+      {/* IoT Security Overview */}
+      {iotOverview && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Protocol Distribution */}
+          <div className="card">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Radio size={20} className="text-blue-400" /> Protocol Distribution
+            </h2>
+            {Object.values(iotOverview.protocol_distribution || {}).some(v => v > 0) ? (
+              <div className="grid grid-cols-2 gap-4 items-center">
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'MQTT', value: iotOverview.protocol_distribution.mqtt || 0 },
+                        { name: 'CoAP', value: iotOverview.protocol_distribution.coap || 0 },
+                        { name: 'TLS',  value: iotOverview.protocol_distribution.tls  || 0 },
+                      ].filter(d => d.value > 0)}
+                      cx="50%" cy="50%" outerRadius={80} dataKey="value"
+                      label={({ name, percent }) => percent > 0 ? `${name} ${(percent*100).toFixed(0)}%` : ''}
+                    >
+                      {['mqtt','coap','tls'].map(p => <Cell key={p} fill={PROTO_COLORS[p]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-2">
+                  {[['MQTT','mqtt'],['CoAP','coap'],['TLS','tls']].map(([label,key]) => (
+                    <div key={key} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: PROTO_COLORS[key] }} />
+                        <span className="font-semibold text-gray-900 dark:text-white text-sm">{label}</span>
+                      </div>
+                      <span className="font-bold text-gray-700 dark:text-gray-300 text-sm">
+                        {iotOverview.protocol_distribution[key] || 0} devices
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-8">No secured devices yet</p>
+            )}
+          </div>
+
+          {/* Security Status + Recent Comms */}
+          <div className="card">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Activity size={20} className="text-green-400" /> Security & Communications
+            </h2>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900 dark:bg-opacity-20 rounded-lg">
+                <ShieldCheck size={20} className="text-green-500" />
+                <div>
+                  <p className="text-xl font-bold text-green-500">{iotOverview.secured_devices}</p>
+                  <p className="text-xs text-gray-500">Secured</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-900 dark:bg-opacity-20 rounded-lg">
+                <ShieldOff size={20} className="text-red-500" />
+                <div>
+                  <p className="text-xl font-bold text-red-500">{iotOverview.unsecured_devices}</p>
+                  <p className="text-xs text-gray-500">Unsecured</p>
+                </div>
+              </div>
+            </div>
+            <div className="mb-3">
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span>Security Score</span>
+                <span className="font-bold text-gray-900 dark:text-white">{iotOverview.security_score}%</span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${iotOverview.security_score >= 80 ? 'bg-green-500' : iotOverview.security_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                  style={{ width: `${iotOverview.security_score}%` }}
+                />
+              </div>
+            </div>
+            {iotOverview.total_communications > 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                <span className="font-bold text-gray-900 dark:text-white">{iotOverview.total_communications}</span> total communications simulated
+              </p>
+            )}
+            {iotOverview.recent_communications?.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Recent</p>
+                {iotOverview.recent_communications.slice(0, 3).map((c, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                    <span className={`px-1.5 py-0.5 rounded font-bold text-white text-xs ${c.protocol === 'mqtt' ? 'bg-blue-600' : c.protocol === 'coap' ? 'bg-emerald-600' : 'bg-violet-600'}`}>
+                      {(c.protocol||'').toUpperCase()}
+                    </span>
+                    <span>{c.source} → {c.target}</span>
+                    <span className="ml-auto">{c.transmission_time_ms?.toFixed(1)}ms</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Live Device Status Panel */}
       <div className="card">

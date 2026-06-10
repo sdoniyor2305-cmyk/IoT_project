@@ -105,7 +105,10 @@ class IoTDeviceResponse(BaseModel):
     is_active: bool
     last_seen: Optional[datetime]
     created_at: datetime
-    
+    protocol: Optional[str] = None
+    is_secured: bool = False
+    bound_key_id: Optional[int] = None
+
     class Config:
         from_attributes = True
 
@@ -118,6 +121,59 @@ class IoTDeviceDetailResponse(IoTDeviceResponse):
     cpu_type: Optional[str]
     memory_kb: Optional[int]
     storage_kb: Optional[int]
+
+
+class DeviceBindKeyRequest(BaseModel):
+    """Request to generate and bind a key to a device with a protocol"""
+    protocol: str = Field(..., description="mqtt, coap, or tls")
+    generation_method: str = Field(..., description="drbg, trng, or puf")
+    key_length_bits: int = Field(..., description="64, 128, or 256")
+    algorithm: str = Field(..., description="AES, ASCON, or SPECK")
+
+    @validator('protocol')
+    def validate_protocol(cls, v):
+        if v not in ['mqtt', 'coap', 'tls']:
+            raise ValueError('Protocol must be mqtt, coap, or tls')
+        return v
+
+    @validator('generation_method')
+    def validate_method(cls, v):
+        if v not in ['drbg', 'trng', 'puf']:
+            raise ValueError('Generation method must be drbg, trng, or puf')
+        return v
+
+    @validator('key_length_bits')
+    def validate_length(cls, v):
+        if v not in [64, 128, 256]:
+            raise ValueError('Key length must be 64, 128, or 256')
+        return v
+
+    @validator('algorithm')
+    def validate_algorithm(cls, v):
+        if v not in ['AES', 'ASCON', 'SPECK']:
+            raise ValueError('Algorithm must be AES, ASCON, or SPECK')
+        return v
+
+
+class DeviceBindKeyResponse(BaseModel):
+    """Response after binding a key to a device"""
+    device_id: int
+    device_name: str
+    protocol: str
+    is_secured: bool
+    key_id: int
+    key_hex: str
+    key_length_bits: int
+    generation_method: str
+    algorithm: str
+    randomness_score: float
+
+
+class CommunicationSimulateRequest(BaseModel):
+    """Request to simulate IoT device-to-device communication"""
+    source_device_id: int
+    target_device_id: int
+    message: str = Field(..., min_length=1, max_length=500)
 
 
 # ==================== Key Generation Schemas ====================
@@ -168,9 +224,17 @@ class CryptographicKeyResponse(BaseModel):
     is_active: bool
     randomness_score: Optional[float]
     created_at: datetime
-    
+    bound_protocol: Optional[str] = None
+    device_id: Optional[int] = None
+
     class Config:
         from_attributes = True
+
+
+class CryptographicKeyListResponse(CryptographicKeyResponse):
+    """Key response enriched with device name"""
+    device_name: Optional[str] = None
+    shannon_entropy: Optional[float] = None
 
 
 class CryptographicKeyDetailResponse(CryptographicKeyResponse):
@@ -330,7 +394,7 @@ class DashboardStatisticsResponse(BaseModel):
     total_operations: int
     avg_entropy_score: float
     total_throughput_kbs: float
-    
+
     class Config:
         example = {
             "total_devices": 10,
@@ -340,6 +404,18 @@ class DashboardStatisticsResponse(BaseModel):
             "avg_entropy_score": 94.2,
             "total_throughput_kbs": 5240.5
         }
+
+
+class IoTOverviewResponse(BaseModel):
+    """Extended IoT dashboard overview with protocol/security stats"""
+    total_devices: int
+    secured_devices: int
+    unsecured_devices: int
+    security_score: float
+    protocol_distribution: Dict[str, int]
+    key_method_distribution: Dict[str, int]
+    total_communications: int
+    recent_communications: List[Dict[str, Any]]
 
 
 class AlgorithmComparisonResponse(BaseModel):

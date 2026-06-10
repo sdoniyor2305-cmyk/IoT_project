@@ -5,8 +5,10 @@ import {
 } from 'recharts';
 import { analysisAPI, keyAPI, deviceAPI, encryptionAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
+import { ShieldCheck, ShieldOff, Radio } from 'lucide-react';
 
 const PIE_COLORS = ['#3b82f6', '#10b981', '#8b5cf6'];
+const PROTO_COLORS = { MQTT: '#3b82f6', COAP: '#10b981', TLS: '#8b5cf6' };
 const CHART_TOOLTIP_STYLE = { backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#f9fafb' };
 
 // Generate 7-day history labels
@@ -28,6 +30,9 @@ const AnalysisPage = () => {
   const [algorithmStats, setAlgorithmStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
+  const [protocolData, setProtocolData] = useState([]);
+  const [keyMethodCompData, setKeyMethodCompData] = useState([]);
+  const [securityReport, setSecurityReport] = useState([]);
 
   // Chart data state
   const [algoPerformanceData, setAlgoPerformanceData] = useState([]);
@@ -39,9 +44,25 @@ const AnalysisPage = () => {
   useEffect(() => {
     loadKeys();
     loadChartsData();
+    loadProtocolData();
     const interval = setInterval(loadChartsData, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  const loadProtocolData = async () => {
+    try {
+      const [proto, methods, report] = await Promise.all([
+        analysisAPI.getProtocolComparison().catch(() => []),
+        analysisAPI.getKeyMethodComparison().catch(() => []),
+        analysisAPI.getSecurityReport().catch(() => []),
+      ]);
+      setProtocolData(proto);
+      setKeyMethodCompData(methods);
+      setSecurityReport(report);
+    } catch (e) {
+      console.error('Protocol data failed:', e);
+    }
+  };
 
   const loadKeys = async () => {
     try {
@@ -601,6 +622,171 @@ const AnalysisPage = () => {
           </div>
         )}
       </div>
+
+      {/* ====== PROTOCOL COMPARISON SECTION ====== */}
+      {protocolData.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <Radio size={24} className="text-blue-400" /> Protocol Performance Comparison
+          </h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="card">
+              <h3 className="text-lg font-bold mb-1 text-gray-900 dark:text-white">Transmission Latency (ms)</h3>
+              <p className="text-xs text-gray-500 mb-4">Average transmission time by protocol</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={protocolData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.3} />
+                  <XAxis dataKey="protocol" stroke="#9ca3af" />
+                  <YAxis stroke="#9ca3af" unit=" ms" />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                  <Bar dataKey="avg_transmission_ms" name="Avg Latency (ms)" radius={[4,4,0,0]}>
+                    {protocolData.map((entry) => (
+                      <Cell key={entry.protocol} fill={PROTO_COLORS[entry.protocol] || '#6b7280'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="card">
+              <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">Protocol Summary</h3>
+              <div className="space-y-3">
+                {protocolData.map(p => (
+                  <div key={p.protocol} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: PROTO_COLORS[p.protocol] || '#6b7280' }} />
+                      <span className="font-bold text-gray-900 dark:text-white">{p.protocol}</span>
+                      {p.source === 'simulated_baseline' && (
+                        <span className="text-xs text-gray-400 italic">baseline</span>
+                      )}
+                    </div>
+                    <div className="text-right text-sm">
+                      <p className="font-semibold text-gray-900 dark:text-white">{p.avg_transmission_ms?.toFixed(1)} ms</p>
+                      <p className="text-xs text-gray-500">{p.count} comm{p.count !== 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====== KEY METHOD COMPARISON ====== */}
+      {keyMethodCompData.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Key Generation Method Comparison</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {keyMethodCompData.map(m => (
+              <div key={m.method} className="card-hover">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-bold text-xl text-gray-900 dark:text-white">{m.method}</span>
+                  <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                    m.security_level === 'High' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                    : m.security_level === 'Medium' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                    : 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300'
+                  }`}>{m.security_level}</span>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Avg Entropy</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{m.avg_entropy?.toFixed(3)} / 8.0</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Randomness</span>
+                    <span className="font-semibold text-green-500">{m.avg_randomness_score?.toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Gen Speed</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">~{m.generation_speed_ms} ms</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Keys Generated</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{m.key_count}</span>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Randomness</span>
+                    <span>{m.avg_randomness_score?.toFixed(1)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div
+                      className="h-1.5 rounded-full bg-blue-500"
+                      style={{ width: `${m.avg_randomness_score || 0}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ====== SECURITY REPORT ====== */}
+      {securityReport.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Per-Device Security Report</h2>
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Device</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Type</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Status</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Protocol</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Algorithm</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Key Method</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Entropy</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Comms</th>
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Grade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {securityReport.map(dev => (
+                  <tr key={dev.device_id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        {dev.is_secured
+                          ? <ShieldCheck size={14} className="text-green-400" />
+                          : <ShieldOff size={14} className="text-red-400" />}
+                        <span className="font-medium text-gray-900 dark:text-white">{dev.device_name}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-gray-500 capitalize">{dev.device_type}</td>
+                    <td className="py-3 px-4">
+                      <span className={`text-xs font-semibold ${dev.status === 'online' ? 'text-green-500' : dev.status === 'error' ? 'text-yellow-500' : 'text-red-500'}`}>
+                        {dev.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {dev.protocol
+                        ? <span className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ backgroundColor: PROTO_COLORS[dev.protocol] || '#6b7280' }}>{dev.protocol}</span>
+                        : <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600 dark:text-gray-400">
+                      {dev.key_info?.algorithm || '—'}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600 dark:text-gray-400">
+                      {dev.key_info?.method || '—'}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-xs">
+                      {dev.key_info?.randomness_score != null
+                        ? <span className="text-green-500">{dev.key_info.randomness_score}%</span>
+                        : '—'}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{dev.communications}</td>
+                    <td className="py-3 px-4">
+                      <span className={`font-bold text-lg ${dev.security_grade === 'A' ? 'text-green-500' : dev.security_grade === 'B' ? 'text-yellow-500' : 'text-red-500'}`}>
+                        {dev.security_grade}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
