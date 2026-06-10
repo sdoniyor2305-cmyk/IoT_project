@@ -10,6 +10,7 @@ import { ShieldCheck, ShieldOff, Radio, Key, CheckCircle, AlertTriangle, Trendin
 const PIE_COLORS = ['#3b82f6', '#10b981', '#8b5cf6'];
 const METHOD_COLORS = { DRBG: '#3b82f6', TRNG: '#10b981', PUF: '#f59e0b' };
 const PROTO_COLORS = { MQTT: '#3b82f6', COAP: '#10b981', TLS: '#8b5cf6' };
+const ALGO_COLORS_MAP = { PRESENT: '#7c3aed', SPECK: '#2563eb', Ascon: '#059669' };
 const CHART_TOOLTIP_STYLE = { backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#f9fafb' };
 
 const getRecommendedMethod = (deviceType) => {
@@ -71,6 +72,7 @@ const AnalysisPage = () => {
   const [keyMethodPieData, setKeyMethodPieData] = useState([]);
   const [deviceHistory, setDeviceHistory] = useState([]);
   const [chartsLoading, setChartsLoading] = useState(true);
+  const [algoComparison, setAlgoComparison] = useState(null);
 
   useEffect(() => {
     loadAll();
@@ -82,8 +84,17 @@ const AnalysisPage = () => {
 
   const loadAll = async () => {
     setLoading(true);
-    await Promise.all([loadKeys(), loadProtocolData(), loadChartsData()]);
+    await Promise.all([loadKeys(), loadProtocolData(), loadChartsData(), loadAlgoComparison()]);
     setLoading(false);
+  };
+
+  const loadAlgoComparison = async () => {
+    try {
+      const data = await analysisAPI.getAlgorithmComparison().catch(() => null);
+      if (data) setAlgoComparison(data);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const loadKeys = async () => {
@@ -315,6 +326,172 @@ const AnalysisPage = () => {
           </div>
         </div>
       </div>
+
+      {/* ====== ALGORITHM COMPARISON ====== */}
+      {algoComparison && algoComparison.characteristics && (
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <TrendingUp size={24} className="text-purple-400" /> {t('analysis.algoComparison') || 'Algorithm Comparison'}
+          </h2>
+
+          {/* Algorithm characteristic cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {algoComparison.characteristics.map(algo => (
+              <div key={algo.algorithm} className="card-hover">
+                <div className="flex items-center justify-between mb-3">
+                  <span
+                    className="font-bold text-xl text-white px-3 py-1 rounded-lg"
+                    style={{ backgroundColor: ALGO_COLORS_MAP[algo.algorithm] || '#6b7280' }}
+                  >
+                    {algo.algorithm}
+                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                      algo.security_level === 'Very High' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                      : algo.security_level === 'High' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                      : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                    }`}>{algo.security_level}</span>
+                    {algo.nist_standard && (
+                      <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 px-2 py-0.5 rounded-full font-semibold">
+                        NIST
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Key Size</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{algo.key_bits}-bit</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Block Size</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{algo.block_bits}-bit</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Rounds</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{algo.rounds}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Memory</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">~{algo.memory_bytes} B</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Target</span>
+                    <span className="font-semibold text-xs text-blue-400">{algo.target}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Keys Used</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{algo.count}</span>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>{t('analysis.speed') || 'Speed'}</span>
+                    <span className="font-bold">{algo.speed_relative}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div
+                      className="h-1.5 rounded-full"
+                      style={{ width: `${algo.speed_relative}%`, backgroundColor: ALGO_COLORS_MAP[algo.algorithm] || '#6b7280' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Algorithm speed & memory bar charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="card">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{t('analysis.speed') || 'Speed'} Comparison</h3>
+              <p className="text-xs text-gray-500 mb-4">Relative speed (higher = faster)</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={algoComparison.characteristics} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" strokeOpacity={0.3} />
+                  <XAxis dataKey="algorithm" stroke="#9ca3af" />
+                  <YAxis stroke="#9ca3af" unit="%" domain={[0, 100]} />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                  <Bar dataKey="speed_relative" name="Speed %" radius={[4, 4, 0, 0]}>
+                    {algoComparison.characteristics.map(entry => (
+                      <Cell key={entry.algorithm} fill={ALGO_COLORS_MAP[entry.algorithm] || '#6b7280'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="card">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{t('analysis.algoDistribution') || 'Algorithm Distribution'}</h3>
+              <p className="text-xs text-gray-500 mb-4">Keys generated per algorithm</p>
+              {algoComparison.characteristics.some(a => a.count > 0) ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie
+                      data={algoComparison.characteristics.filter(a => a.count > 0)}
+                      cx="50%" cy="50%" outerRadius={80} dataKey="count"
+                      nameKey="algorithm"
+                      label={({ algorithm, percent }) => percent > 0 ? `${algorithm} ${(percent * 100).toFixed(0)}%` : ''}
+                    >
+                      {algoComparison.characteristics.filter(a => a.count > 0).map(entry => (
+                        <Cell key={entry.algorithm} fill={ALGO_COLORS_MAP[entry.algorithm] || '#6b7280'} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(val, name) => [`${val} key${val !== 1 ? 's' : ''}`, name]} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-center py-8 text-gray-500 text-sm">
+                  No keys yet. Bind keys on the Devices page.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Device-Algorithm matrix */}
+          <div className="card overflow-x-auto">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3">{t('analysis.deviceAlgoMatrix') || 'Device-Algorithm Matrix'}</h3>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Device Type</th>
+                  {['PRESENT', 'SPECK', 'Ascon'].map(algo => (
+                    <th key={algo} className="text-center py-3 px-4">
+                      <span className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ backgroundColor: ALGO_COLORS_MAP[algo] || '#6b7280' }}>{algo}</span>
+                    </th>
+                  ))}
+                  <th className="text-left py-3 px-4 text-gray-500 font-medium">Recommended</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { device: 'Sensor / RFID',   present: 'Best',  speck: 'Good',  ascon: 'Poor',  rec: 'PRESENT', recAlgo: 'PRESENT' },
+                  { device: 'Actuator / Lock',  present: 'Good',  speck: 'Best',  ascon: 'Good',  rec: 'SPECK',   recAlgo: 'SPECK' },
+                  { device: 'Camera',           present: 'Poor',  speck: 'Good',  ascon: 'Best',  rec: 'Ascon',   recAlgo: 'Ascon' },
+                  { device: 'Gateway',          present: 'Poor',  speck: 'Good',  ascon: 'Best',  rec: 'Ascon',   recAlgo: 'Ascon' },
+                  { device: 'Controller',       present: 'Poor',  speck: 'Good',  ascon: 'Best',  rec: 'Ascon',   recAlgo: 'Ascon' },
+                ].map(row => (
+                  <tr key={row.device} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{row.device}</td>
+                    {[row.present, row.speck, row.ascon].map((v, i) => (
+                      <td key={i} className="py-3 px-4 text-center">
+                        {v === 'Best' ? <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-900 text-green-300">Best</span>
+                         : v === 'Good' ? <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-900 text-blue-300">Good</span>
+                         : <span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-700 text-gray-400">Poor</span>}
+                      </td>
+                    ))}
+                    <td className="py-3 px-4">
+                      <span className="font-bold text-sm px-2 py-0.5 rounded text-white" style={{ backgroundColor: ALGO_COLORS_MAP[row.recAlgo] || '#6b7280' }}>
+                        {row.rec}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ====== KEY METHOD COMPARISON ====== */}
       {keyMethodCompData.length > 0 && (

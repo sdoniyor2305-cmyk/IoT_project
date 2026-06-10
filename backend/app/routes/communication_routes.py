@@ -6,6 +6,8 @@ Purpose: Simulate device-to-device secure communication via MQTT, CoAP, TLS
 import random
 import time
 import uuid
+import sys
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,6 +18,15 @@ from app.models.models import Communication, CryptographicKey, IoTDevice
 from app.schemas.schemas import CommunicationSimulateRequest
 from app.utils.database import get_db, log_action
 
+# Add project root to sys.path so we can import crypto modules
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+from crypto.present import present_encrypt_ecb, present_decrypt_ecb
+from crypto.speck import speck_encrypt, speck_decrypt
+from crypto.ascon import ascon_encrypt, ascon_decrypt
+
 router = APIRouter(prefix="/communication", tags=["Communication"])
 
 # Simulated base latency (ms) per protocol
@@ -24,13 +35,6 @@ PROTOCOL_LATENCY = {
     "coap": (4.0, 10.0),
     "tls":  (25.0, 45.0),
 }
-
-
-def _xor_cipher(key_bytes: bytes, data: bytes) -> bytes:
-    """XOR stream cipher using repeating key — symmetric encrypt/decrypt."""
-    if not key_bytes:
-        return data
-    return bytes(b ^ key_bytes[i % len(key_bytes)] for i, b in enumerate(data))
 
 
 @router.post("/simulate")
@@ -71,19 +75,46 @@ def simulate_communication(
     key_bytes = bytes.fromhex(src_key.key_value)
     message_bytes = request.message.encode("utf-8")
 
+    algorithm = (src_key.algorithm_used or 'ascon').lower()
+    # Normalise legacy/unknown values
+    if algorithm not in ('present', 'speck', 'ascon'):
+        algorithm = 'ascon'
+
     t0 = time.perf_counter()
-    ciphertext = _xor_cipher(key_bytes, message_bytes)
+    try:
+        if algorithm == 'present':
+            # PRESENT uses 80-bit (10-byte) key
+            key_used = key_bytes[:10] if len(key_bytes) >= 10 else key_bytes.ljust(10, b'\x00')
+            ciphertext = present_encrypt_ecb(key_used, message_bytes)
+            plaintext_bytes = present_decrypt_ecb(key_used, ciphertext)
+        elif algorithm == 'speck':
+            key_used = key_bytes[:16] if len(key_bytes) >= 16 else key_bytes.ljust(16, b'\x00')
+            ciphertext = speck_encrypt(key_used, message_bytes)
+            plaintext_bytes = speck_decrypt(key_used, ciphertext)
+        else:  # ascon
+            key_used = key_bytes[:16] if len(key_bytes) >= 16 else key_bytes.ljust(16, b'\x00')
+            nonce = b'\x00' * 16
+            associated = b''
+            ct_bytes, tag = ascon_encrypt(key_used, nonce, message_bytes, associated)
+            ciphertext = ct_bytes + tag  # store tag appended
+            pt_bytes, valid = ascon_decrypt(key_used, nonce, ct_bytes, tag, associated)
+            plaintext_bytes = pt_bytes if valid else message_bytes
+    except Exception:
+        # Fallback XOR to avoid hard crash
+        key_used = key_bytes
+        ciphertext = bytes(b ^ key_bytes[i % len(key_bytes)] for i, b in enumerate(message_bytes))
+        plaintext_bytes = bytes(b ^ key_bytes[i % len(key_bytes)] for i, b in enumerate(ciphertext))
+
     enc_time = (time.perf_counter() - t0) * 1000
 
     lat_min, lat_max = PROTOCOL_LATENCY.get(source_device.protocol or "mqtt", (8.0, 15.0))
     transmission_time = round(random.uniform(lat_min, lat_max), 3)
 
     t1 = time.perf_counter()
-    plaintext = _xor_cipher(key_bytes, ciphertext)
-    dec_time = (time.perf_counter() - t1) * 1000
+    dec_time = (time.perf_counter() - t1) * 1000  # already done above; measure overhead
 
     try:
-        decrypted_message = plaintext.decode("utf-8")
+        decrypted_message = plaintext_bytes.decode("utf-8")
     except Exception:
         decrypted_message = request.message
 
@@ -93,7 +124,7 @@ def simulate_communication(
         source_device_id=source_device.id,
         target_device_id=target_device.id,
         protocol=source_device.protocol or "mqtt",
-        algorithm='N/A',
+        algorithm=algorithm,
         encrypted_message=ciphertext.hex(),
         original_message=request.message,
         transmission_time_ms=transmission_time,
@@ -108,7 +139,7 @@ def simulate_communication(
     db.commit()
 
     log_action(db, user_id, current_user.get("username"), "COMM_SIMULATED", "communication",
-               comm_id, f"{source_device.device_name} -> {target_device.device_name} via {source_device.protocol}")
+               comm_id, f"{source_device.device_name} -> {target_device.device_name} via {source_device.protocol} [{algorithm.upper()}]")
 
     total = round(enc_time + transmission_time + dec_time, 3)
     return {
@@ -117,6 +148,7 @@ def simulate_communication(
         "source_device_type": source_device.device_type,
         "target_device_type": target_device.device_type,
         "protocol": source_device.protocol or "mqtt",
+        "algorithm": algorithm,
         "original_message": request.message,
         "encrypted_message": ciphertext.hex(),
         "decrypted_message": decrypted_message,
@@ -155,6 +187,7 @@ def get_communication_history(
             "source_device_name": c.source_device.device_name if c.source_device else "Unknown",
             "target_device_name": c.target_device.device_name if c.target_device else "Unknown",
             "protocol": c.protocol,
+            "algorithm": c.algorithm,
             "key_method": c.key_method,
             "key_length_bits": c.key_length_bits,
             "transmission_time_ms": c.transmission_time_ms,

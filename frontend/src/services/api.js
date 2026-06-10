@@ -125,6 +125,9 @@ export const analysisAPI = {
 
   getKeyUsageHistory: (keyId) =>
     api.get(`/analysis/keys/${keyId}/history`),
+
+  getAlgorithmComparison: () =>
+    api.get('/analysis/algorithms/comparison'),
 };
 
 // Admin APIs

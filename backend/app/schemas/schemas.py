@@ -84,7 +84,8 @@ class IoTDeviceDetailResponse(IoTDeviceResponse):
 class DeviceBindKeyRequest(BaseModel):
     protocol: str = Field(..., description="mqtt, coap, or tls")
     generation_method: str = Field(..., description="drbg, trng, or puf")
-    key_length_bits: int = Field(..., description="64, 128, or 256")
+    key_length_bits: int = Field(..., description="80, 128, or 256")
+    algorithm: str = Field(..., description="present, speck, or ascon")
 
     @validator('protocol')
     def validate_protocol(cls, v):
@@ -100,8 +101,14 @@ class DeviceBindKeyRequest(BaseModel):
 
     @validator('key_length_bits')
     def validate_length(cls, v):
-        if v not in [64, 128, 256]:
-            raise ValueError('Key length must be 64, 128, or 256')
+        if v not in [80, 128, 256]:
+            raise ValueError('Key length must be 80, 128, or 256')
+        return v
+
+    @validator('algorithm')
+    def validate_algorithm(cls, v):
+        if v not in ['present', 'speck', 'ascon']:
+            raise ValueError('Algorithm must be present, speck, or ascon')
         return v
 
 
@@ -119,6 +126,7 @@ class DeviceBindKeyResponse(BaseModel):
     match_status: str
     randomness_score: float
     shannon_entropy: Optional[float] = None
+    algorithm_used: Optional[str] = None
 
 
 class CommunicationSimulateRequest(BaseModel):
@@ -130,15 +138,15 @@ class CommunicationSimulateRequest(BaseModel):
 # ==================== Key Generation Schemas ====================
 
 class KeyGenerationRequest(BaseModel):
-    key_length_bits: int = Field(..., description="64, 128, or 256 bits")
+    key_length_bits: int = Field(..., description="80, 128, or 256 bits")
     generation_method: str = Field(..., description="drbg, trng, or puf")
     device_id: Optional[int] = None
     description: Optional[str] = None
 
     @validator('key_length_bits')
     def validate_key_length(cls, v):
-        if v not in [64, 128, 256]:
-            raise ValueError('Key length must be 64, 128, or 256 bits')
+        if v not in [64, 80, 128, 256]:
+            raise ValueError('Key length must be 64, 80, 128, or 256 bits')
         return v
 
     @validator('generation_method')
@@ -167,6 +175,7 @@ class CryptographicKeyListResponse(CryptographicKeyResponse):
     device_name: Optional[str] = None
     device_type: Optional[str] = None
     shannon_entropy: Optional[float] = None
+    algorithm_used: Optional[str] = None
 
 
 class CryptographicKeyDetailResponse(CryptographicKeyResponse):
@@ -253,6 +262,7 @@ class IoTOverviewResponse(BaseModel):
     key_method_distribution: Dict[str, int]
     total_communications: int
     recent_communications: List[Dict[str, Any]]
+    algorithm_distribution: Optional[Dict[str, int]] = None
 
 
 class MethodComparisonResponse(BaseModel):

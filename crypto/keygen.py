@@ -214,16 +214,16 @@ class KeyGenerator:
     def generate_random_key(self, key_length: int = 16) -> bytes:
         """
         Generate random key using DRBG
-        
+
         Args:
-            key_length: Key length in bytes (16, 32, or 64)
-            
+            key_length: Key length in bytes (8 to 64)
+
         Returns:
             Random key
         """
-        if key_length not in [16, 32, 64]:
-            raise ValueError("Key length must be 16, 32, or 64 bytes")
-        
+        if key_length < 8 or key_length > 64:
+            raise ValueError("Key length must be between 8 and 64 bytes")
+
         return self.drbg.generate(key_length)
     
     def generate_trng_key(self, key_length: int = 16) -> bytes:
@@ -241,24 +241,20 @@ class KeyGenerator:
     def generate_puf_key(self, challenge: bytes = b'', key_length: int = 16) -> bytes:
         """
         Generate key using PUF simulation
-        
+
         Args:
             challenge: Challenge input
-            key_length: Key length in bytes (max 32)
-            
+            key_length: Key length in bytes
+
         Returns:
             PUF-generated key
         """
-        if key_length > 32:
-            # Generate multiple PUF keys
-            keys = []
-            for i in range((key_length + 31) // 32):
-                challenge_ext = challenge + struct.pack('<I', i)
-                key = self.puf.generate_key(challenge_ext)
-                keys.append(key)
-            return b''.join(keys)[:key_length]
-        
-        return self.puf.generate_key(challenge)[:key_length]
+        keys = []
+        for i in range((key_length + 15) // 16):
+            challenge_ext = challenge + struct.pack('<I', i)
+            key = self.puf.generate_key(challenge_ext)
+            keys.append(key)
+        return b''.join(keys)[:key_length]
     
     def generate_drbg_key_with_seed(self, seed: bytes, key_length: int = 16) -> bytes:
         """

@@ -105,12 +105,71 @@ def analyze_entropy(
 
 
 @router.get("/performance/comparison")
-def get_algorithm_comparison(
+def get_performance_comparison(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Kept for backwards compatibility — returns empty list."""
     return []
+
+
+@router.get("/algorithms/comparison")
+def get_algorithm_comparison(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return algorithm usage distribution and characteristics."""
+    user_id = int(current_user.get("sub"))
+
+    keys = db.query(CryptographicKey).filter(CryptographicKey.user_id == user_id).all()
+
+    algo_dist = {"present": 0, "speck": 0, "ascon": 0}
+    for k in keys:
+        a = (k.algorithm_used or '').lower()
+        if a in algo_dist:
+            algo_dist[a] += 1
+
+    # Algorithm characteristics (research benchmarks for IoT)
+    characteristics = [
+        {
+            "algorithm": "PRESENT",
+            "key_bits": 80,
+            "block_bits": 64,
+            "rounds": 31,
+            "memory_bytes": 1000,
+            "speed_relative": 100,
+            "security_level": "Medium",
+            "target": "Sensor/RFID",
+            "nist_standard": False,
+            "count": algo_dist.get("present", 0),
+        },
+        {
+            "algorithm": "SPECK",
+            "key_bits": 128,
+            "block_bits": 64,
+            "rounds": 27,
+            "memory_bytes": 2000,
+            "speed_relative": 90,
+            "security_level": "High",
+            "target": "Actuator/Lock",
+            "nist_standard": False,
+            "count": algo_dist.get("speck", 0),
+        },
+        {
+            "algorithm": "Ascon",
+            "key_bits": 128,
+            "block_bits": 64,
+            "rounds": 12,
+            "memory_bytes": 8000,
+            "speed_relative": 70,
+            "security_level": "Very High",
+            "target": "Camera/Gateway",
+            "nist_standard": True,
+            "count": algo_dist.get("ascon", 0),
+        },
+    ]
+
+    return {"distribution": algo_dist, "characteristics": characteristics}
 
 
 @router.get("/dashboard/statistics", response_model=DashboardStatisticsResponse)
@@ -256,10 +315,14 @@ def get_iot_overview(
 
     keys = db.query(CryptographicKey).filter(CryptographicKey.user_id == user_id).all()
     method_dist = {"drbg": 0, "trng": 0, "puf": 0}
+    algo_dist = {"present": 0, "speck": 0, "ascon": 0}
     for k in keys:
         m = (k.generation_method or "").lower()
         if m in method_dist:
             method_dist[m] += 1
+        a = (k.algorithm_used or "").lower()
+        if a in algo_dist:
+            algo_dist[a] += 1
 
     total_comms = db.query(Communication).filter(Communication.user_id == user_id).count()
     recent = (
@@ -291,6 +354,7 @@ def get_iot_overview(
         key_method_distribution=method_dist,
         total_communications=total_comms,
         recent_communications=recent_list,
+        algorithm_distribution=algo_dist,
     )
 
 
@@ -424,6 +488,7 @@ def get_security_report(
                 key_info = {
                     "key_id": k.key_id[:16] + "...",
                     "method": k.generation_method.upper(),
+                    "algorithm": (k.algorithm_used or '').upper(),
                     "length_bits": k.key_length_bits,
                     "randomness_score": round(k.randomness_score or 0, 1),
                     "shannon_entropy": round(k.shannon_entropy or 0, 4),

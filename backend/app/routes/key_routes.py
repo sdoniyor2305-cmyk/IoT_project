@@ -106,6 +106,7 @@ def list_keys(
             device_name=device_name,
             device_type=device_type,
             shannon_entropy=k.shannon_entropy,
+            algorithm_used=k.algorithm_used,
         ))
     return result
 

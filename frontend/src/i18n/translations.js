@@ -261,6 +261,86 @@ const translations = {
     'method.puf.p1': 'Qurilmaga xos', 'method.puf.p2': 'Klonlanmas', 'method.puf.p3': "Apparatga bog'liq",
     'method.puf.c1': 'Faqat simulyatsiya', 'method.puf.c2': "Cheklangan tasodifiylik",
 
+    // Devices — new algorithm/method/recommendation keys
+    'devices.bindTitle': 'Kalit yaratish va bog\'lash',
+    'devices.recommendation': 'Tavsiya',
+    'devices.recommendedFor': 'uchun tavsiya',
+    'devices.algorithmSelector': 'Shifrlash algoritmi',
+    'devices.methodSelector': 'Kalit yaratish usuli',
+    'devices.protocolSelector': 'Protokol',
+    'devices.matchOptimal': 'Optimal kombinatsiya',
+    'devices.matchNonOptimal': 'Optimal emas',
+    'devices.generateBind': 'Kalit yaratish',
+    'devices.generating': 'Yaratilmoqda...',
+    'devices.keyPreview': 'Kalit ko\'rinishi',
+    'devices.securityGrade': 'Xavfsizlik darajasi',
+    'devices.deviceType.sensor': 'Sezgich',
+    'devices.deviceType.actuator': 'Aktuator',
+    'devices.deviceType.gateway': 'Shlyuz',
+    'devices.deviceType.controller': 'Kontroller',
+    'devices.deviceType.camera': 'Kamera',
+
+    // Algorithm descriptions
+    'algo.present.name': 'PRESENT',
+    'algo.present.desc': 'O\'ta yengil shifrlash — 80-bit, RFID va sezgichlar uchun',
+    'algo.present.short': 'Ultra-yengil, 80-bit',
+    'algo.speck.name': 'SPECK',
+    'algo.speck.desc': 'Yengil shifrlash — 64/128-bit, kam resursli qurilmalar uchun',
+    'algo.speck.short': 'Yengil, 128-bit',
+    'algo.ascon.name': 'Ascon',
+    'algo.ascon.short': 'NIST standarti, 128/256-bit',
+
+    // Method short descriptions
+    'method.drbg.short': 'Algoritmik — tez, NIST SP 800-90A standartiga mos',
+    'method.trng.short': 'Apparat shovqini — yuqori entropiya, haqiqiy tasodifiylik',
+    'method.puf.short': 'Chip barmoq izi — qurilmaga xos, klonlanmaydigan',
+
+    // Keys page
+    'keys.algorithm': 'Algoritm',
+    'keys.method': 'Usul',
+    'keys.deviceType': 'Qurilma turi',
+    'keys.protocol': 'Protokol',
+    'keys.matchStatus': 'Mos',
+    'keys.optimal': 'Optimal',
+    'keys.nonOptimal': 'Optimal emas',
+    'keys.total': 'Jami',
+    'keys.filterAlgo': 'Algoritm bo\'yicha',
+    'keys.filterMethod': 'Usul bo\'yicha',
+
+    // Communication page
+    'comm.algorithm': 'Algoritm',
+    'comm.step.prepare': 'Ma\'lumot tayyorlanmoqda',
+    'comm.step.encrypt': 'bilan shifrlanmoqda',
+    'comm.step.send': 'orqali yuborilmoqda',
+    'comm.step.receive': 'Qabul qilindi',
+    'comm.step.decrypt': 'Deshifrlanmoqda',
+    'comm.step.done': 'Ma\'lumot yetkazildi',
+    'comm.keyInfo': 'Kalit ma\'lumotlari',
+    'comm.originalData': 'Asl ma\'lumot',
+    'comm.encryptedData': 'Shifrlangan (hex)',
+    'comm.decryptedData': 'Deshifrlangan',
+
+    // Analysis page
+    'analysis.algoComparison': 'Algoritm taqqoslash',
+    'analysis.algoVsMethod': 'Algoritm va usul',
+    'analysis.deviceAlgoMatrix': 'Qurilma-algoritm matritsa',
+    'analysis.securityGrades': 'Xavfsizlik baholari',
+    'analysis.algoDistribution': 'Algoritm taqsimoti',
+    'analysis.methodDistribution': 'Usul taqsimoti',
+    'analysis.speed': 'Tezlik',
+    'analysis.memory': 'Xotira',
+    'analysis.security': 'Xavfsizlik',
+    'analysis.nistStandard': 'NIST standarti',
+
+    // Dashboard
+    'dashboard.secured': 'Himoyalangan',
+    'dashboard.unsecured': 'Himoyasiz',
+    'dashboard.algoDistribution': 'Algoritm taqsimoti',
+    'dashboard.methodDistribution': 'Usul taqsimoti',
+    'dashboard.securityScore': 'Xavfsizlik ko\'rsatkichi',
+    'dashboard.recentComms': 'So\'nggi aloqalar',
+    'dashboard.commCount': 'Aloqalar soni',
+
     // Admin
     'admin.nav': 'Admin Panel',
     'admin.title': 'Admin Panel',
@@ -603,6 +683,86 @@ const translations = {
     'method.puf.desc': 'Simulates device-specific PUF characteristics. Generates keys based on device manufacturing variations for unique per-device keys.',
     'method.puf.p1': 'Device-unique', 'method.puf.p2': 'Unclonable', 'method.puf.p3': 'Hardware-tied',
     'method.puf.c1': 'Simulation only', 'method.puf.c2': 'Limited randomness',
+
+    // Devices — new algorithm/method/recommendation keys
+    'devices.bindTitle': 'Generate & Bind Key',
+    'devices.recommendation': 'Recommendation',
+    'devices.recommendedFor': 'Recommended for',
+    'devices.algorithmSelector': 'Encryption Algorithm',
+    'devices.methodSelector': 'Key Generation Method',
+    'devices.protocolSelector': 'Protocol',
+    'devices.matchOptimal': 'Optimal combination',
+    'devices.matchNonOptimal': 'Not optimal',
+    'devices.generateBind': 'Generate Key',
+    'devices.generating': 'Generating...',
+    'devices.keyPreview': 'Key Preview',
+    'devices.securityGrade': 'Security Grade',
+    'devices.deviceType.sensor': 'Sensor',
+    'devices.deviceType.actuator': 'Actuator',
+    'devices.deviceType.gateway': 'Gateway',
+    'devices.deviceType.controller': 'Controller',
+    'devices.deviceType.camera': 'Camera',
+
+    // Algorithm descriptions
+    'algo.present.name': 'PRESENT',
+    'algo.present.desc': 'Ultra-lightweight cipher — 80-bit, designed for RFID and sensors',
+    'algo.present.short': 'Ultra-light, 80-bit',
+    'algo.speck.name': 'SPECK',
+    'algo.speck.desc': 'Lightweight cipher — 64/128-bit, for low-resource devices',
+    'algo.speck.short': 'Lightweight, 128-bit',
+    'algo.ascon.name': 'Ascon',
+    'algo.ascon.short': 'NIST standard, 128/256-bit',
+
+    // Method short descriptions
+    'method.drbg.short': 'Algorithmic — fast, NIST SP 800-90A compliant',
+    'method.trng.short': 'Hardware noise — high entropy, true randomness',
+    'method.puf.short': 'Chip fingerprint — device-unique, unclonable',
+
+    // Keys page
+    'keys.algorithm': 'Algorithm',
+    'keys.method': 'Method',
+    'keys.deviceType': 'Device Type',
+    'keys.protocol': 'Protocol',
+    'keys.matchStatus': 'Match',
+    'keys.optimal': 'Optimal',
+    'keys.nonOptimal': 'Non-Optimal',
+    'keys.total': 'Total',
+    'keys.filterAlgo': 'Filter by Algorithm',
+    'keys.filterMethod': 'Filter by Method',
+
+    // Communication page
+    'comm.algorithm': 'Algorithm',
+    'comm.step.prepare': 'Preparing packet',
+    'comm.step.encrypt': 'Encrypting with',
+    'comm.step.send': 'Sending via',
+    'comm.step.receive': 'Received at target',
+    'comm.step.decrypt': 'Decrypting data',
+    'comm.step.done': 'Data delivered',
+    'comm.keyInfo': 'Key Info',
+    'comm.originalData': 'Original Data',
+    'comm.encryptedData': 'Encrypted (hex)',
+    'comm.decryptedData': 'Decrypted',
+
+    // Analysis page
+    'analysis.algoComparison': 'Algorithm Comparison',
+    'analysis.algoVsMethod': 'Algorithm vs Method',
+    'analysis.deviceAlgoMatrix': 'Device-Algorithm Matrix',
+    'analysis.securityGrades': 'Security Grades',
+    'analysis.algoDistribution': 'Algorithm Distribution',
+    'analysis.methodDistribution': 'Method Distribution',
+    'analysis.speed': 'Speed',
+    'analysis.memory': 'Memory',
+    'analysis.security': 'Security',
+    'analysis.nistStandard': 'NIST Standard',
+
+    // Dashboard
+    'dashboard.secured': 'Secured',
+    'dashboard.unsecured': 'Unsecured',
+    'dashboard.algoDistribution': 'Algorithm Distribution',
+    'dashboard.methodDistribution': 'Method Distribution',
+    'dashboard.securityScore': 'Security Score',
+    'dashboard.recentComms': 'Recent Communications',
+    'dashboard.commCount': 'Communications',
 
     // Admin
     'admin.nav': 'Admin Panel',

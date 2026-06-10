@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Radio, Send, ShieldCheck, ShieldOff, Clock, Lock, ArrowRight,
   Cpu, Activity, CheckCircle, AlertCircle, RefreshCw, PackageOpen,
@@ -22,13 +23,13 @@ const DATA_PRESETS = {
   controller: 'mode:auto,setpoint:22.0,status:active',
 };
 
-const COMM_STEPS = [
-  { id: 'packet',   icon: PackageOpen,   label: 'Generating packet' },
-  { id: 'encrypt',  icon: Lock,          label: 'Encrypting with key' },
-  { id: 'send',     icon: Wifi,          label: 'Sending via protocol' },
-  { id: 'receive',  icon: Database,      label: 'Received at target' },
-  { id: 'decrypt',  icon: PackageCheck,  label: 'Decrypting data' },
-  { id: 'done',     icon: CheckCircle,   label: 'Data delivered' },
+const getCommSteps = (result, t) => [
+  { id: 'packet',   icon: PackageOpen,   label: t('comm.step.prepare') || 'Preparing packet' },
+  { id: 'encrypt',  icon: Lock,          label: `${t('comm.step.encrypt') || 'Encrypting with'} ${result ? (result.algorithm || 'key').toUpperCase() : 'key'}` },
+  { id: 'send',     icon: Wifi,          label: `${t('comm.step.send') || 'Sending via'} ${result ? (result.protocol || 'MQTT').toUpperCase() : 'protocol'}` },
+  { id: 'receive',  icon: Database,      label: t('comm.step.receive') || 'Received at target' },
+  { id: 'decrypt',  icon: PackageCheck,  label: t('comm.step.decrypt') || 'Decrypting data' },
+  { id: 'done',     icon: CheckCircle,   label: t('comm.step.done') || 'Data delivered' },
 ];
 
 const DeviceSelector = ({ device, label, selected, onSelect, devices, exclude, onPick, showPicker, onToggle }) => {
@@ -131,6 +132,7 @@ const CommunicationPage = () => {
   const sourceDevice = devices.find(d => d.id === sourceId);
   const targetDevice = devices.find(d => d.id === targetId);
   const securedDevices = devices.filter(d => d.is_secured);
+  const COMM_STEPS = getCommSteps(result, t);
 
   // Auto-update preset when source device type changes
   useEffect(() => {
@@ -217,9 +219,9 @@ const CommunicationPage = () => {
         <div className="flex items-stretch gap-4">
           <DeviceSelector
             device={sourceDevice}
-            label="Source Device"
+            label={t('comm.source') || 'Source Device'}
             selected={!!sourceDevice}
-            devices={securedDevices}
+            devices={devices}
             exclude={targetId}
             onPick={(id) => { setSourceId(id); setShowSourcePicker(false); }}
             showPicker={showSourcePicker}
@@ -254,7 +256,7 @@ const CommunicationPage = () => {
 
           <DeviceSelector
             device={targetDevice}
-            label="Target Device"
+            label={t('comm.target') || 'Target Device'}
             selected={!!targetDevice}
             devices={devices}
             exclude={sourceId}
@@ -375,6 +377,18 @@ const CommunicationPage = () => {
             <span className={`px-2 py-1 rounded font-bold text-white text-xs uppercase ${protocolColor(result.protocol)}`}>
               {protocolLabel(result.protocol)}
             </span>
+            {result.algorithm && (
+              <span className={`px-2 py-1 rounded font-bold text-white text-xs uppercase ${
+                result.algorithm === 'present' ? 'bg-purple-700'
+                : result.algorithm === 'speck' ? 'bg-blue-700'
+                : 'bg-green-700'
+              }`}>
+                {result.algorithm.toUpperCase()}
+              </span>
+            )}
+            <span className="px-2 py-1 rounded bg-gray-700 text-gray-200 text-xs">
+              {t('comm.algorithm') || 'Algorithm'}: {result.algorithm?.toUpperCase() || 'N/A'}
+            </span>
             <span className="px-2 py-1 rounded bg-gray-700 text-gray-200 text-xs">
               Method: {result.key_method?.toUpperCase()}
             </span>
@@ -466,13 +480,13 @@ const CommunicationPage = () => {
         </div>
       )}
 
-      {securedDevices.length === 0 && (
+      {devices.length === 0 && (
         <div className="card text-center py-12 border-dashed border-2 border-gray-700">
           <ShieldOff size={40} className="mx-auto text-gray-500 mb-3" />
-          <p className="text-gray-400">No secured devices. Go to Devices and bind keys first.</p>
-          <a href="/devices" className="mt-3 inline-block text-blue-400 hover:underline text-sm">
-            Go to Devices →
-          </a>
+          <p className="text-gray-400">{t('comm.noSecuredDevices') || 'No secured devices. Go to Devices and bind keys first.'}</p>
+          <Link to="/devices" className="mt-3 inline-block text-blue-400 hover:underline text-sm">
+            {t('devices.title') || 'Go to Devices'} →
+          </Link>
         </div>
       )}
     </div>

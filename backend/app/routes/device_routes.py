@@ -21,18 +21,35 @@ from crypto.analysis import EntropyAnalyzer
 router = APIRouter(prefix="/devices", tags=["IoT Devices"])
 
 
+DEVICE_RECOMMENDATIONS = {
+    'sensor':       {'algorithm': 'present', 'method': 'puf',  'protocol': 'mqtt', 'key_bits': 80},
+    'rfid':         {'algorithm': 'present', 'method': 'puf',  'protocol': 'mqtt', 'key_bits': 80},
+    'actuator':     {'algorithm': 'speck',   'method': 'puf',  'protocol': 'coap', 'key_bits': 128},
+    'smart lock':   {'algorithm': 'speck',   'method': 'puf',  'protocol': 'coap', 'key_bits': 128},
+    'camera':       {'algorithm': 'ascon',   'method': 'trng', 'protocol': 'tls',  'key_bits': 128},
+    'smart device': {'algorithm': 'ascon',   'method': 'trng', 'protocol': 'tls',  'key_bits': 128},
+    'gateway':      {'algorithm': 'ascon',   'method': 'drbg', 'protocol': 'tls',  'key_bits': 256},
+    'controller':   {'algorithm': 'ascon',   'method': 'drbg', 'protocol': 'tls',  'key_bits': 256},
+}
+
+
+def get_recommendation(device_type: str) -> dict:
+    t = (device_type or '').lower().strip()
+    for key in DEVICE_RECOMMENDATIONS:
+        if key in t or t == key:
+            return DEVICE_RECOMMENDATIONS[key]
+    return DEVICE_RECOMMENDATIONS['gateway']
+
+
 def get_recommended_method(device_type: str) -> str:
-    t = (device_type or '').lower()
-    if t in ['sensor', 'actuator']:
-        return 'puf'
-    elif t == 'camera':
-        return 'trng'
-    return 'drbg'
+    return get_recommendation(device_type)['method']
 
 
-def get_match_status(device_type: str, generation_method: str) -> str:
-    recommended = get_recommended_method(device_type)
-    return 'optimal' if generation_method.lower() == recommended else 'non-optimal'
+def get_match_status(device_type: str, generation_method: str, algorithm: str = '') -> str:
+    rec = get_recommendation(device_type)
+    method_ok = generation_method.lower() == rec['method']
+    algo_ok = not algorithm or algorithm.lower() == rec['algorithm']
+    return 'optimal' if (method_ok and algo_ok) else 'non-optimal'
 
 
 @router.post("", response_model=IoTDeviceResponse)
@@ -179,7 +196,7 @@ def update_device_status(
     return {"device_id": device.id, "status": device.status}
 
 
-def _generate_and_bind(device, protocol, generation_method, key_length_bits, user_id, db):
+def _generate_and_bind(device, protocol, generation_method, key_length_bits, user_id, db, algorithm='ascon'):
     if device.bound_key_id:
         old_key = db.query(CryptographicKey).filter(CryptographicKey.id == device.bound_key_id).first()
         if old_key:
@@ -205,7 +222,7 @@ def _generate_and_bind(device, protocol, generation_method, key_length_bits, use
         key_value=key_bytes.hex(),
         key_length_bits=key_length_bits,
         generation_method=generation_method,
-        algorithm_used='N/A',
+        algorithm_used=algorithm,
         shannon_entropy=entropy.get('shannon_entropy'),
         min_entropy=entropy.get('min_entropy'),
         collision_entropy=entropy.get('collision_entropy'),
@@ -242,14 +259,14 @@ def bind_key(
 
     new_key, score = _generate_and_bind(
         device, request.protocol, request.generation_method,
-        request.key_length_bits, user_id, db
+        request.key_length_bits, user_id, db, algorithm=request.algorithm
     )
 
     recommended = get_recommended_method(device.device_type)
-    match = get_match_status(device.device_type, request.generation_method)
+    match = get_match_status(device.device_type, request.generation_method, request.algorithm)
 
     log_action(db, user_id, current_user.get("username"), "KEY_BOUND", "device",
-               device.device_id, f"Protocol:{request.protocol} Method:{request.generation_method}")
+               device.device_id, f"Protocol:{request.protocol} Method:{request.generation_method} Algo:{request.algorithm}")
 
     return DeviceBindKeyResponse(
         device_id=device.id,
@@ -265,6 +282,7 @@ def bind_key(
         match_status=match,
         randomness_score=score,
         shannon_entropy=new_key.shannon_entropy,
+        algorithm_used=new_key.algorithm_used,
     )
 
 
@@ -289,16 +307,17 @@ def rotate_key(
     if not old_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bound key not found")
 
+    old_algorithm = old_key.algorithm_used or 'ascon'
     new_key, score = _generate_and_bind(
         device, device.protocol, old_key.generation_method,
-        old_key.key_length_bits, user_id, db
+        old_key.key_length_bits, user_id, db, algorithm=old_algorithm
     )
 
     recommended = get_recommended_method(device.device_type)
-    match = get_match_status(device.device_type, old_key.generation_method)
+    match = get_match_status(device.device_type, old_key.generation_method, old_algorithm)
 
     log_action(db, user_id, current_user.get("username"), "KEY_ROTATED", "device",
-               device.device_id, f"Protocol:{device.protocol}")
+               device.device_id, f"Protocol:{device.protocol} Algo:{old_algorithm}")
 
     return DeviceBindKeyResponse(
         device_id=device.id,
@@ -314,6 +333,7 @@ def rotate_key(
         match_status=match,
         randomness_score=score,
         shannon_entropy=new_key.shannon_entropy,
+        algorithm_used=new_key.algorithm_used,
     )
 
 

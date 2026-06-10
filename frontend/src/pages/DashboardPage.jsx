@@ -9,6 +9,7 @@ import { useLang } from '../context/LangContext';
 
 const PROTO_COLORS = { mqtt: '#3b82f6', coap: '#10b981', tls: '#8b5cf6' };
 const METHOD_COLORS_ARR = ['#3b82f6', '#10b981', '#f59e0b'];
+const ALGO_COLORS_ARR = ['#7c3aed', '#2563eb', '#059669'];
 const TOOLTIP_STYLE = { backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#f9fafb' };
 
 const getStatusConfig = (status) => {
@@ -43,6 +44,7 @@ const DashboardPage = () => {
   const [iotOverview, setIotOverview] = useState(null);
   const [devices, setDevices] = useState([]);
   const [keyMethodData, setKeyMethodData] = useState([]);
+  const [algoDistData, setAlgoDistData] = useState([]);
   const [protocolBarData, setProtocolBarData] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,6 +65,12 @@ const DashboardPage = () => {
           { name: 'DRBG', value: md.drbg || 0 },
           { name: 'TRNG', value: md.trng || 0 },
           { name: 'PUF',  value: md.puf  || 0 },
+        ]);
+        const ad = overview.algorithm_distribution || {};
+        setAlgoDistData([
+          { name: 'PRESENT', value: ad.present || 0 },
+          { name: 'SPECK',   value: ad.speck   || 0 },
+          { name: 'Ascon',   value: ad.ascon   || 0 },
         ]);
         const pd = overview.protocol_distribution || {};
         setProtocolBarData([
@@ -316,6 +324,56 @@ const DashboardPage = () => {
           </div>
         </div>
       </div>
+
+      {/* ====== ALGORITHM DISTRIBUTION ====== */}
+      {algoDistData.some(a => a.value > 0) && (
+        <div className="card">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+            {t('dashboard.algoDistribution') || 'Algorithm Distribution'}
+          </h2>
+          <p className="text-xs text-gray-500 mb-4">Encryption algorithms used across bound keys</p>
+          <div className="grid grid-cols-2 gap-4 items-center">
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie
+                  data={algoDistData.filter(a => a.value > 0)}
+                  cx="50%" cy="50%" outerRadius={80} dataKey="value"
+                  label={({ name, percent }) => percent > 0 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}
+                  labelLine={false}
+                >
+                  {algoDistData.filter(a => a.value > 0).map((entry, i) => (
+                    <Cell key={entry.name} fill={ALGO_COLORS_ARR[i % ALGO_COLORS_ARR.length]} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(val, name) => [`${val} key${val !== 1 ? 's' : ''}`, name]} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-2">
+              {algoDistData.map((item, i) => {
+                const total = algoDistData.reduce((s, x) => s + x.value, 0);
+                const pct = total > 0 ? ((item.value / total) * 100).toFixed(0) : 0;
+                const descs = {
+                  PRESENT: 'Ultra-lightweight, 80-bit, IoT sensors',
+                  SPECK:   'Lightweight, 128-bit, actuators',
+                  Ascon:   'NIST standard, 128/256-bit, gateways',
+                };
+                return (
+                  <div key={item.name} className="p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: ALGO_COLORS_ARR[i] }} />
+                        <span className="font-bold text-gray-900 dark:text-white text-sm">{item.name}</span>
+                      </div>
+                      <span className="font-bold text-sm" style={{ color: ALGO_COLORS_ARR[i] }}>{pct}% ({item.value})</span>
+                    </div>
+                    <p className="text-xs text-gray-400 ml-5">{descs[item.name]}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ====== LIVE DEVICE STATUS ====== */}
       <div className="card">
