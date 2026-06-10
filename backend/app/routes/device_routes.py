@@ -1,6 +1,5 @@
 """
 IoT Device Management Routes
-Purpose: Device creation, listing, updating, and status monitoring
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -22,37 +21,37 @@ from crypto.analysis import EntropyAnalyzer
 router = APIRouter(prefix="/devices", tags=["IoT Devices"])
 
 
+def get_recommended_method(device_type: str) -> str:
+    t = (device_type or '').lower()
+    if t in ['sensor', 'actuator']:
+        return 'puf'
+    elif t == 'camera':
+        return 'trng'
+    return 'drbg'
+
+
+def get_match_status(device_type: str, generation_method: str) -> str:
+    recommended = get_recommended_method(device_type)
+    return 'optimal' if generation_method.lower() == recommended else 'non-optimal'
+
+
 @router.post("", response_model=IoTDeviceResponse)
 def create_device(
     request: IoTDeviceCreateRequest,
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Create new IoT device
-    
-    Args:
-        request: Device creation data
-        current_user: Current authenticated user
-        db: Database session
-        
-    Returns:
-        Created device data
-    """
     user_id = int(current_user.get("sub"))
-    
-    # Check if device_id already exists
+
     existing_device = db.query(IoTDevice).filter(
         IoTDevice.device_id == request.device_id
     ).first()
-    
     if existing_device:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Device ID already exists"
         )
-    
-    # Create new device
+
     new_device = IoTDevice(
         device_id=request.device_id,
         device_name=request.device_name,
@@ -66,7 +65,7 @@ def create_device(
         user_id=user_id,
         status="offline"
     )
-    
+
     db.add(new_device)
     db.commit()
     db.refresh(new_device)
@@ -81,20 +80,8 @@ def list_devices(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    List all devices for current user
-    
-    Args:
-        current_user: Current authenticated user
-        db: Database session
-        
-    Returns:
-        List of devices
-    """
     user_id = int(current_user.get("sub"))
-    
     devices = db.query(IoTDevice).filter(IoTDevice.user_id == user_id).all()
-    
     return devices
 
 
@@ -104,30 +91,13 @@ def get_device(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get device details
-    
-    Args:
-        device_id: Device ID
-        current_user: Current authenticated user
-        db: Database session
-        
-    Returns:
-        Device details
-    """
     user_id = int(current_user.get("sub"))
-    
     device = db.query(IoTDevice).filter(
         IoTDevice.id == device_id,
         IoTDevice.user_id == user_id
     ).first()
-    
     if not device:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
     return device
 
 
@@ -138,32 +108,14 @@ def update_device(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Update device information
-    
-    Args:
-        device_id: Device ID
-        request: Updated device data
-        current_user: Current authenticated user
-        db: Database session
-        
-    Returns:
-        Updated device data
-    """
     user_id = int(current_user.get("sub"))
-    
     device = db.query(IoTDevice).filter(
         IoTDevice.id == device_id,
         IoTDevice.user_id == user_id
     ).first()
-    
     if not device:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device not found"
-        )
-    
-    # Update fields
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
     device.device_name = request.device_name
     device.device_type = request.device_type
     device.manufacturer = request.manufacturer
@@ -173,10 +125,9 @@ def update_device(
     device.memory_kb = request.memory_kb
     device.storage_kb = request.storage_kb
     device.updated_at = datetime.utcnow()
-    
+
     db.commit()
     db.refresh(device)
-    
     return device
 
 
@@ -186,30 +137,14 @@ def delete_device(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Delete device
-    
-    Args:
-        device_id: Device ID
-        current_user: Current authenticated user
-        db: Database session
-        
-    Returns:
-        Deletion confirmation
-    """
     user_id = int(current_user.get("sub"))
-    
     device = db.query(IoTDevice).filter(
         IoTDevice.id == device_id,
         IoTDevice.user_id == user_id
     ).first()
-    
     if not device:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
     device_label = device.device_id
     db.delete(device)
     db.commit()
@@ -225,48 +160,26 @@ def update_device_status(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Update device status (online/offline)
-
-    Args:
-        device_id: Device ID
-        request: Status update request body with status field
-        current_user: Current authenticated user
-        db: Database session
-
-    Returns:
-        Updated device status
-    """
     user_id = int(current_user.get("sub"))
 
     if request.status not in ["online", "offline", "error"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid status value"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status value")
 
     device = db.query(IoTDevice).filter(
         IoTDevice.id == device_id,
         IoTDevice.user_id == user_id
     ).first()
-
     if not device:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
     device.status = request.status
     device.last_seen = datetime.utcnow()
     db.commit()
     db.refresh(device)
-
     return {"device_id": device.id, "status": device.status}
 
 
-def _generate_and_bind(device, protocol, generation_method, key_length_bits, algorithm, user_id, db):
-    """Helper: generate a new key and bind it to the device."""
-    # Deactivate existing bound key
+def _generate_and_bind(device, protocol, generation_method, key_length_bits, user_id, db):
     if device.bound_key_id:
         old_key = db.query(CryptographicKey).filter(CryptographicKey.id == device.bound_key_id).first()
         if old_key:
@@ -292,7 +205,7 @@ def _generate_and_bind(device, protocol, generation_method, key_length_bits, alg
         key_value=key_bytes.hex(),
         key_length_bits=key_length_bits,
         generation_method=generation_method,
-        algorithm_used=algorithm,
+        algorithm_used='N/A',
         shannon_entropy=entropy.get('shannon_entropy'),
         min_entropy=entropy.get('min_entropy'),
         collision_entropy=entropy.get('collision_entropy'),
@@ -319,7 +232,6 @@ def bind_key(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Generate a new key and bind it to the device with the selected protocol."""
     user_id = int(current_user.get("sub"))
 
     device = db.query(IoTDevice).filter(
@@ -330,8 +242,11 @@ def bind_key(
 
     new_key, score = _generate_and_bind(
         device, request.protocol, request.generation_method,
-        request.key_length_bits, request.algorithm, user_id, db
+        request.key_length_bits, user_id, db
     )
+
+    recommended = get_recommended_method(device.device_type)
+    match = get_match_status(device.device_type, request.generation_method)
 
     log_action(db, user_id, current_user.get("username"), "KEY_BOUND", "device",
                device.device_id, f"Protocol:{request.protocol} Method:{request.generation_method}")
@@ -339,14 +254,17 @@ def bind_key(
     return DeviceBindKeyResponse(
         device_id=device.id,
         device_name=device.device_name,
+        device_type=device.device_type or 'unknown',
         protocol=request.protocol,
         is_secured=True,
         key_id=new_key.id,
         key_hex=new_key.key_value,
         key_length_bits=new_key.key_length_bits,
         generation_method=new_key.generation_method,
-        algorithm=new_key.algorithm_used,
+        recommended_method=recommended,
+        match_status=match,
         randomness_score=score,
+        shannon_entropy=new_key.shannon_entropy,
     )
 
 
@@ -356,7 +274,6 @@ def rotate_key(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Rotate the bound key on a device using the same settings."""
     user_id = int(current_user.get("sub"))
 
     device = db.query(IoTDevice).filter(
@@ -374,8 +291,11 @@ def rotate_key(
 
     new_key, score = _generate_and_bind(
         device, device.protocol, old_key.generation_method,
-        old_key.key_length_bits, old_key.algorithm_used, user_id, db
+        old_key.key_length_bits, user_id, db
     )
+
+    recommended = get_recommended_method(device.device_type)
+    match = get_match_status(device.device_type, old_key.generation_method)
 
     log_action(db, user_id, current_user.get("username"), "KEY_ROTATED", "device",
                device.device_id, f"Protocol:{device.protocol}")
@@ -383,12 +303,46 @@ def rotate_key(
     return DeviceBindKeyResponse(
         device_id=device.id,
         device_name=device.device_name,
+        device_type=device.device_type or 'unknown',
         protocol=device.protocol,
         is_secured=True,
         key_id=new_key.id,
         key_hex=new_key.key_value,
         key_length_bits=new_key.key_length_bits,
         generation_method=new_key.generation_method,
-        algorithm=new_key.algorithm_used,
+        recommended_method=recommended,
+        match_status=match,
         randomness_score=score,
+        shannon_entropy=new_key.shannon_entropy,
     )
+
+
+@router.post("/{device_id}/revoke-key")
+def revoke_key(
+    device_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revoke (unbind) the key from a device."""
+    user_id = int(current_user.get("sub"))
+
+    device = db.query(IoTDevice).filter(
+        IoTDevice.id == device_id, IoTDevice.user_id == user_id
+    ).first()
+    if not device:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    if not device.is_secured or not device.bound_key_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Device has no bound key")
+
+    old_key = db.query(CryptographicKey).filter(CryptographicKey.id == device.bound_key_id).first()
+    if old_key:
+        old_key.is_active = False
+        old_key.bound_protocol = None
+
+    device.is_secured = False
+    device.bound_key_id = None
+    device.protocol = None
+    db.commit()
+
+    log_action(db, user_id, current_user.get("username"), "KEY_REVOKED", "device", device.device_id)
+    return {"message": "Key revoked successfully", "device_id": device.id}

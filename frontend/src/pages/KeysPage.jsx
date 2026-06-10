@@ -1,23 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Download, Eye, EyeOff, ShieldCheck, Link, RefreshCw } from 'lucide-react';
-import { keyAPI, deviceAPI } from '../services/api';
+import { Trash2, Download, Eye, EyeOff, ShieldCheck, Link, CheckCircle, AlertTriangle } from 'lucide-react';
+import { keyAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
 
 const PROTOCOL_COLORS = {
   mqtt: 'bg-blue-600', coap: 'bg-emerald-600', tls: 'bg-violet-600',
 };
 
+const METHOD_COLORS = {
+  drbg: 'bg-blue-700', trng: 'bg-green-700', puf: 'bg-orange-700',
+};
+
+const getRecommendedMethod = (deviceType) => {
+  const t = (deviceType || '').toLowerCase();
+  if (['sensor', 'actuator'].includes(t)) return 'puf';
+  if (t === 'camera') return 'trng';
+  return 'drbg';
+};
+
+const getMatchStatus = (deviceType, method) => {
+  if (!deviceType || !method) return null;
+  return getRecommendedMethod(deviceType) === method.toLowerCase() ? 'optimal' : 'non-optimal';
+};
+
 const KeysPage = () => {
   const { t } = useLang();
   const [keys, setKeys] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
   const [visibleKeyId, setVisibleKeyId] = useState(null);
-  const [formData, setFormData] = useState({
-    key_length_bits: 128,
-    generation_method: 'drbg',
-    algorithm: 'AES',
-  });
 
   useEffect(() => {
     loadKeys();
@@ -31,19 +41,6 @@ const KeysPage = () => {
       console.error('Failed to load keys:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleGenerateKey = async (e) => {
-    e.preventDefault();
-    try {
-      const newKey = await keyAPI.generate(formData);
-      setKeys([newKey, ...keys]);
-      setFormData({ key_length_bits: 128, generation_method: 'drbg', algorithm: 'AES' });
-      setShowForm(false);
-    } catch (error) {
-      console.error('Failed to generate key:', error);
-      alert(t('keys.failed') + (error.message || 'Unknown error'));
     }
   };
 
@@ -73,73 +70,31 @@ const KeysPage = () => {
     }
   };
 
+  const activeKeys = keys.filter(k => k.is_active);
+  const rotatedKeys = keys.filter(k => !k.is_active);
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('keys.title')}</h1>
-          <p className="text-gray-600 dark:text-gray-400">{t('keys.subtitle')}</p>
-        </div>
-        <button onClick={() => setShowForm(!showForm)} className="btn btn-primary gap-2">
-          <Plus size={20} /> {t('keys.generateBtn')}
-        </button>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('keys.title')}</h1>
+        <p className="text-gray-600 dark:text-gray-400">{t('keys.subtitle')}</p>
       </div>
 
-      {showForm && (
-        <div className="card">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('keys.generateNew')}</h2>
-          <form onSubmit={handleGenerateKey} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('keys.keyLength')}
-                </label>
-                <select
-                  value={formData.key_length_bits}
-                  onChange={(e) => setFormData({ ...formData, key_length_bits: parseInt(e.target.value) })}
-                  className="input"
-                >
-                  <option value={64}>64-bit</option>
-                  <option value={128}>128-bit</option>
-                  <option value={256}>256-bit</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('keys.genMethod')}
-                </label>
-                <select
-                  value={formData.generation_method}
-                  onChange={(e) => setFormData({ ...formData, generation_method: e.target.value })}
-                  className="input"
-                >
-                  <option value="drbg">DRBG</option>
-                  <option value="trng">TRNG</option>
-                  <option value="puf">PUF</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('common.algorithm')}
-                </label>
-                <select
-                  value={formData.algorithm}
-                  onChange={(e) => setFormData({ ...formData, algorithm: e.target.value })}
-                  className="input"
-                >
-                  <option value="AES">AES</option>
-                  <option value="ASCON">ASCON</option>
-                  <option value="SPECK">SPECK</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <button type="submit" className="btn btn-primary flex-1">{t('keys.generate')}</button>
-              <button type="button" onClick={() => setShowForm(false)} className="btn btn-ghost flex-1">
-                {t('common.cancel')}
-              </button>
-            </div>
-          </form>
+      {/* Summary stats */}
+      {keys.length > 0 && (
+        <div className="grid grid-cols-3 gap-4">
+          <div className="card-hover text-center py-4">
+            <p className="text-2xl font-bold text-blue-400">{keys.length}</p>
+            <p className="text-sm text-gray-500 mt-1">Total Keys</p>
+          </div>
+          <div className="card-hover text-center py-4">
+            <p className="text-2xl font-bold text-green-400">{activeKeys.length}</p>
+            <p className="text-sm text-gray-500 mt-1">Active</p>
+          </div>
+          <div className="card-hover text-center py-4">
+            <p className="text-2xl font-bold text-gray-400">{rotatedKeys.length}</p>
+            <p className="text-sm text-gray-500 mt-1">Rotated</p>
+          </div>
         </div>
       )}
 
@@ -147,95 +102,165 @@ const KeysPage = () => {
         <div className="text-center py-12 text-gray-500">{t('keys.loading')}</div>
       ) : keys.length === 0 ? (
         <div className="card text-center py-12">
-          <p className="text-gray-500 dark:text-gray-400">{t('keys.empty')}</p>
+          <p className="text-gray-500 dark:text-gray-400 mb-2">{t('keys.empty')}</p>
+          <p className="text-gray-400 text-sm">Go to Devices and use "Generate & Bind Key" to create keys.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
-          {keys.map((key) => (
-            <div key={key.id} className="card-hover">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white">{key.key_id}</h3>
-                  <p className="text-sm text-gray-500">{key.algorithm_used} • {key.key_length_bits}-bit</p>
-                </div>
-                <span className="badge badge-info">{key.generation_method.toUpperCase()}</span>
-              </div>
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Key ID</th>
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Bound Device</th>
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Method</th>
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Recommended</th>
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Match</th>
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Length</th>
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Entropy</th>
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Protocol</th>
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Status</th>
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Created</th>
+                <th className="text-left py-3 px-3 text-gray-500 dark:text-gray-400 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {keys.map((key) => {
+                const recommended = getRecommendedMethod(key.device_type);
+                const matchStatus = getMatchStatus(key.device_type, key.generation_method);
+                return (
+                  <tr key={key.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    {/* Key ID */}
+                    <td className="py-3 px-3">
+                      <div className="font-mono text-xs text-gray-700 dark:text-gray-300">
+                        {key.key_id.slice(0, 16)}...
+                      </div>
+                      {/* Show/hide key value */}
+                      {visibleKeyId === key.id && (
+                        <div className="mt-1 font-mono text-xs text-blue-400 break-all max-w-xs">
+                          {key.key_value || '(not loaded)'}
+                        </div>
+                      )}
+                    </td>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
-                <div>
-                  <p className="text-gray-500">{t('keys.randomness')}</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {key.randomness_score?.toFixed(1) || 'N/A'}%
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-500">{t('keys.shannonEntropy')}</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {key.shannon_entropy?.toFixed(2) || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-500">{t('keys.status')}</p>
-                  <p className="font-semibold">
-                    {key.is_active
-                      ? <span className="badge badge-success">{t('keys.active')}</span>
-                      : <span className="badge badge-error text-xs">Rotated</span>}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-500">{t('keys.created')}</p>
-                  <p className="font-semibold text-gray-900 dark:text-white text-xs">
-                    {new Date(key.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
+                    {/* Bound device */}
+                    <td className="py-3 px-3">
+                      {key.device_name ? (
+                        <div>
+                          <div className="flex items-center gap-1 text-gray-900 dark:text-white font-medium">
+                            <ShieldCheck size={12} className="text-green-400" />
+                            {key.device_name}
+                          </div>
+                          {key.device_type && (
+                            <span className="text-xs text-gray-400 capitalize">{key.device_type}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">Unbound</span>
+                      )}
+                    </td>
 
-              {/* Protocol / Device binding info */}
-              {(key.bound_protocol || key.device_name) && (
-                <div className="flex items-center gap-2 mb-3 text-xs">
-                  <ShieldCheck size={13} className="text-green-400 flex-shrink-0" />
-                  {key.bound_protocol && (
-                    <span className={`px-1.5 py-0.5 rounded text-white font-bold uppercase ${PROTOCOL_COLORS[key.bound_protocol] || 'bg-gray-600'}`}>
-                      {key.bound_protocol}
-                    </span>
-                  )}
-                  {key.device_name && (
-                    <span className="flex items-center gap-1 text-gray-400">
-                      <Link size={11} /> bound to <span className="text-white font-medium">{key.device_name}</span>
-                    </span>
-                  )}
-                </div>
-              )}
+                    {/* Method */}
+                    <td className="py-3 px-3">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${METHOD_COLORS[key.generation_method?.toLowerCase()] || 'bg-gray-600'}`}>
+                        {key.generation_method?.toUpperCase() || '—'}
+                      </span>
+                    </td>
 
-              <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded mb-4 overflow-x-auto">
-                <p className="text-xs font-mono text-gray-600 dark:text-gray-300 break-all">
-                  {visibleKeyId === key.id ? key.key_value : '•'.repeat(64)}
-                </p>
-              </div>
+                    {/* Recommended */}
+                    <td className="py-3 px-3">
+                      {key.device_type ? (
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${METHOD_COLORS[recommended] || 'bg-gray-600'}`}>
+                          {recommended.toUpperCase()}
+                        </span>
+                      ) : <span className="text-gray-400">—</span>}
+                    </td>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setVisibleKeyId(visibleKeyId === key.id ? null : key.id)}
-                  className="btn btn-ghost flex-1 gap-2 text-sm"
-                >
-                  {visibleKeyId === key.id ? <EyeOff size={16} /> : <Eye size={16} />}
-                  {visibleKeyId === key.id ? t('keys.hide') : t('keys.show')}
-                </button>
-                <button
-                  onClick={() => handleExportKey(key.id)}
-                  className="btn btn-ghost flex-1 gap-2 text-sm"
-                >
-                  <Download size={16} /> {t('keys.export')}
-                </button>
-                <button
-                  onClick={() => handleDeleteKey(key.id)}
-                  className="btn text-red-600 hover:bg-red-50 dark:hover:bg-red-900 flex-1 gap-2 text-sm"
-                >
-                  <Trash2 size={16} /> {t('keys.delete')}
-                </button>
-              </div>
-            </div>
-          ))}
+                    {/* Match status */}
+                    <td className="py-3 px-3">
+                      {matchStatus === 'optimal' ? (
+                        <span className="flex items-center gap-1 text-green-400 text-xs font-semibold">
+                          <CheckCircle size={12} /> Optimal
+                        </span>
+                      ) : matchStatus === 'non-optimal' ? (
+                        <span className="flex items-center gap-1 text-yellow-400 text-xs font-semibold">
+                          <AlertTriangle size={12} /> Non-Optimal
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
+
+                    {/* Key length */}
+                    <td className="py-3 px-3 text-gray-700 dark:text-gray-300 font-mono text-xs">
+                      {key.key_length_bits}-bit
+                    </td>
+
+                    {/* Entropy score */}
+                    <td className="py-3 px-3">
+                      <div className="text-xs">
+                        <span className={`font-semibold ${(key.randomness_score || 0) >= 90 ? 'text-green-400' : 'text-yellow-400'}`}>
+                          {key.randomness_score?.toFixed(1) || 'N/A'}%
+                        </span>
+                        {key.shannon_entropy && (
+                          <div className="text-gray-500 font-mono">{key.shannon_entropy.toFixed(2)}/8</div>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Protocol */}
+                    <td className="py-3 px-3">
+                      {key.bound_protocol ? (
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${PROTOCOL_COLORS[key.bound_protocol] || 'bg-gray-600'}`}>
+                          {key.bound_protocol.toUpperCase()}
+                        </span>
+                      ) : <span className="text-gray-400">—</span>}
+                    </td>
+
+                    {/* Status */}
+                    <td className="py-3 px-3">
+                      {key.is_active ? (
+                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-900 text-green-300">Active</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-700 text-gray-400">Rotated</span>
+                      )}
+                    </td>
+
+                    {/* Created */}
+                    <td className="py-3 px-3 text-gray-400 text-xs">
+                      {new Date(key.created_at).toLocaleDateString()}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-3 px-3">
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setVisibleKeyId(visibleKeyId === key.id ? null : key.id)}
+                          className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-900 dark:hover:text-white"
+                          title="Show/hide key value"
+                        >
+                          {visibleKeyId === key.id ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                        <button
+                          onClick={() => handleExportKey(key.id)}
+                          className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-900 dark:hover:text-white"
+                          title="Export key"
+                        >
+                          <Download size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteKey(key.id)}
+                          className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-500"
+                          title="Delete key"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

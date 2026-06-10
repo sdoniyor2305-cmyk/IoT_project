@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Plus, Trash2, Activity, ShieldCheck, ShieldOff, RefreshCw,
-  Cpu, MemoryStick, Wifi, WifiOff, AlertTriangle, X, ChevronRight, ChevronLeft, Key
+  Cpu, MemoryStick, Wifi, WifiOff, AlertTriangle, X, Key, XCircle
 } from 'lucide-react';
 import { deviceAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
@@ -21,21 +21,27 @@ const PROTOCOL_INFO = {
 };
 
 const METHOD_INFO = {
-  drbg: { label: 'DRBG', color: 'bg-blue-700', desc: 'Deterministic — fast, reproducible', entropy: '~96%' },
-  trng: { label: 'TRNG', color: 'bg-green-700', desc: 'True random — highest entropy', entropy: '~99%' },
-  puf:  { label: 'PUF', color: 'bg-orange-700', desc: 'Device-unique unclonable key', entropy: '~85%' },
+  drbg: { label: 'DRBG', color: 'bg-blue-700', desc: 'Algorithmic — fast, NIST-compliant', entropy: '~96%', forDevices: 'gateway, controller' },
+  trng: { label: 'TRNG', color: 'bg-green-700', desc: 'Hardware noise — highest entropy', entropy: '~99%', forDevices: 'camera' },
+  puf:  { label: 'PUF', color: 'bg-orange-700', desc: 'Chip fingerprint — device-unique', entropy: '~85%', forDevices: 'sensor, actuator' },
 };
 
 const LENGTH_INFO = {
-  64:  { label: '64-bit', color: 'bg-gray-700', desc: 'Ultra-lightweight IoT devices' },
-  128: { label: '128-bit', color: 'bg-blue-700', desc: 'Standard security (recommended)' },
-  256: { label: '256-bit', color: 'bg-purple-700', desc: 'Maximum security' },
+  64:  { label: '64-bit', desc: 'Ultra-lightweight IoT' },
+  128: { label: '128-bit', desc: 'Standard security (recommended)' },
+  256: { label: '256-bit', desc: 'Maximum security' },
 };
 
-const ALGO_INFO = {
-  AES:   { label: 'AES', color: 'bg-blue-700', desc: 'Industry standard, well-tested' },
-  ASCON: { label: 'ASCON', color: 'bg-green-700', desc: 'Lightweight authenticated encryption' },
-  SPECK: { label: 'SPECK', color: 'bg-orange-700', desc: 'Ultra-lightweight block cipher' },
+const getRecommendedMethod = (deviceType) => {
+  const t = (deviceType || '').toLowerCase();
+  if (['sensor', 'actuator'].includes(t)) return 'puf';
+  if (t === 'camera') return 'trng';
+  return 'drbg';
+};
+
+const getMatchStatus = (deviceType, method) => {
+  if (!deviceType || !method) return null;
+  return getRecommendedMethod(deviceType) === method.toLowerCase() ? 'optimal' : 'non-optimal';
 };
 
 const formatLastSeen = (lastSeen) => {
@@ -49,21 +55,16 @@ const formatLastSeen = (lastSeen) => {
 };
 
 const BindKeyModal = ({ device, onClose, onSuccess }) => {
-  const { t } = useLang();
-  const [step, setStep] = useState(1); // 1-4
-  const [form, setForm] = useState({ protocol: '', method: '', length: 128, algorithm: 'AES' });
+  const recommended = getRecommendedMethod(device.device_type);
+  const [form, setForm] = useState({ method: recommended, length: 128, protocol: '' });
   const [binding, setBinding] = useState(false);
   const [bindResult, setBindResult] = useState(null);
   const [error, setError] = useState('');
 
-  const stepsValid = [
-    true,
-    !!form.protocol,
-    !!form.method,
-    !!form.algorithm,
-  ];
+  const recInfo = METHOD_INFO[recommended];
 
   const handleBind = async () => {
+    if (!form.protocol) { setError('Please select a protocol'); return; }
     setBinding(true);
     setError('');
     try {
@@ -71,7 +72,6 @@ const BindKeyModal = ({ device, onClose, onSuccess }) => {
         protocol: form.protocol,
         generation_method: form.method,
         key_length_bits: form.length,
-        algorithm: form.algorithm,
       });
       setBindResult(res);
       onSuccess(res);
@@ -83,12 +83,13 @@ const BindKeyModal = ({ device, onClose, onSuccess }) => {
   };
 
   if (bindResult) {
+    const match = bindResult.match_status;
     return (
       <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
         <div className="bg-gray-900 border border-green-700 rounded-2xl p-6 max-w-md w-full shadow-2xl">
           <div className="text-center mb-4">
             <ShieldCheck size={48} className="mx-auto text-green-400 mb-2" />
-            <h2 className="text-xl font-bold text-white">{t('devices.bindSuccess')}</h2>
+            <h2 className="text-xl font-bold text-white">Key Generated & Bound!</h2>
           </div>
           <div className="space-y-2 text-sm bg-gray-800 rounded-xl p-4 mb-4">
             <div className="flex justify-between">
@@ -102,12 +103,18 @@ const BindKeyModal = ({ device, onClose, onSuccess }) => {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-400">Algorithm</span>
-              <span className="text-white">{bindResult.algorithm}</span>
-            </div>
-            <div className="flex justify-between">
               <span className="text-gray-400">Method</span>
               <span className="text-white">{(bindResult.generation_method || '').toUpperCase()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Recommended</span>
+              <span className="text-blue-300">{(bindResult.recommended_method || '').toUpperCase()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Match</span>
+              <span className={`font-bold text-xs px-2 py-0.5 rounded ${match === 'optimal' ? 'bg-green-900 text-green-300' : 'bg-yellow-900 text-yellow-300'}`}>
+                {match === 'optimal' ? '✓ OPTIMAL' : '⚠ NON-OPTIMAL'}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Key Length</span>
@@ -117,6 +124,12 @@ const BindKeyModal = ({ device, onClose, onSuccess }) => {
               <span className="text-gray-400">Entropy Score</span>
               <span className="text-green-400 font-bold">{bindResult.randomness_score?.toFixed(1)}%</span>
             </div>
+            {bindResult.shannon_entropy && (
+              <div className="flex justify-between">
+                <span className="text-gray-400">Shannon Entropy</span>
+                <span className="text-blue-300 font-mono">{bindResult.shannon_entropy.toFixed(4)} / 8.0</span>
+              </div>
+            )}
           </div>
           <p className="text-xs text-gray-500 mb-4 font-mono break-all">
             Key: {bindResult.key_hex?.slice(0, 32)}...
@@ -128,159 +141,144 @@ const BindKeyModal = ({ device, onClose, onSuccess }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full shadow-2xl">
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full shadow-2xl my-4">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Key size={20} className="text-blue-400" /> Bind Key to {device.device_name}
+            <Key size={20} className="text-blue-400" /> Generate & Bind Key
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={20} /></button>
         </div>
 
-        {/* Step indicator */}
-        <div className="flex items-center gap-2 mb-6">
-          {[1,2,3,4].map(s => (
-            <React.Fragment key={s}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
-                ${s < step ? 'bg-green-600 text-white' : s === step ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}>
-                {s < step ? '✓' : s}
-              </div>
-              {s < 4 && <div className={`flex-1 h-1 rounded ${s < step ? 'bg-green-600' : 'bg-gray-700'}`} />}
-            </React.Fragment>
-          ))}
+        {/* Device info */}
+        <div className="bg-gray-800 rounded-xl p-3 mb-4 flex items-center gap-3">
+          <Cpu size={18} className="text-blue-400 flex-shrink-0" />
+          <div>
+            <p className="text-white font-semibold">{device.device_name}</p>
+            <p className="text-xs text-gray-400 capitalize">{device.device_type} · {device.device_id}</p>
+          </div>
         </div>
 
-        {/* Step 1: Protocol */}
-        {step === 1 && (
-          <div>
-            <h3 className="font-semibold text-white mb-3">{t('devices.bindStep1')}</h3>
-            <div className="grid gap-3">
-              {Object.entries(PROTOCOL_INFO).map(([key, info]) => (
-                <button
-                  key={key}
-                  onClick={() => setForm(f => ({ ...f, protocol: key }))}
-                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left
-                    ${form.protocol === key ? `border-blue-500 ${info.color} bg-opacity-30` : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
-                >
-                  <div>
-                    <span className={`font-bold text-white px-2 py-0.5 rounded text-sm ${info.color} mr-2`}>{info.label}</span>
-                    <span className="text-gray-300 text-sm">{info.desc}</span>
-                  </div>
-                  <span className="text-xs text-gray-400 ml-2">{info.latency}</span>
-                </button>
-              ))}
-            </div>
+        {/* Recommended method highlight */}
+        <div className={`rounded-xl p-3 mb-4 border-2 border-dashed ${
+          recommended === 'puf' ? 'border-orange-600 bg-orange-950 bg-opacity-30' :
+          recommended === 'trng' ? 'border-green-600 bg-green-950 bg-opacity-30' :
+          'border-blue-600 bg-blue-950 bg-opacity-30'
+        }`}>
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Recommended for {device.device_type}</p>
+          <div className="flex items-center gap-2">
+            <span className={`font-bold text-white px-2 py-0.5 rounded text-sm ${METHOD_INFO[recommended]?.color}`}>
+              {recInfo?.label}
+            </span>
+            <span className="text-gray-300 text-sm">{recInfo?.desc}</span>
+            <span className="text-xs text-green-400 ml-auto font-mono">{recInfo?.entropy}</span>
           </div>
-        )}
+        </div>
 
-        {/* Step 2: Method */}
-        {step === 2 && (
-          <div>
-            <h3 className="font-semibold text-white mb-3">{t('devices.bindStep2')}</h3>
-            <div className="grid gap-3">
-              {Object.entries(METHOD_INFO).map(([key, info]) => (
-                <button
-                  key={key}
-                  onClick={() => setForm(f => ({ ...f, method: key }))}
-                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left
-                    ${form.method === key ? `border-blue-500 ${info.color} bg-opacity-30` : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
-                >
-                  <div>
-                    <span className={`font-bold text-white px-2 py-0.5 rounded text-sm ${info.color} mr-2`}>{info.label}</span>
-                    <span className="text-gray-300 text-sm">{info.desc}</span>
-                  </div>
-                  <span className="text-xs text-green-400 font-mono">{info.entropy}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Key Length */}
-        {step === 3 && (
-          <div>
-            <h3 className="font-semibold text-white mb-3">{t('devices.bindStep3')}</h3>
-            <div className="grid gap-3">
-              {Object.entries(LENGTH_INFO).map(([bits, info]) => (
-                <button
-                  key={bits}
-                  onClick={() => setForm(f => ({ ...f, length: parseInt(bits) }))}
-                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left
-                    ${form.length === parseInt(bits) ? `border-blue-500 ${info.color} bg-opacity-30` : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
-                >
-                  <span className="font-bold text-white">{info.label}</span>
-                  <span className="text-gray-400 text-sm">{info.desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Algorithm + Generate */}
-        {step === 4 && (
-          <div>
-            <h3 className="font-semibold text-white mb-3">{t('devices.bindStep4')}</h3>
-            <div className="grid gap-3 mb-4">
-              {Object.entries(ALGO_INFO).map(([key, info]) => (
-                <button
-                  key={key}
-                  onClick={() => setForm(f => ({ ...f, algorithm: key }))}
-                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left
-                    ${form.algorithm === key ? `border-blue-500 ${info.color} bg-opacity-30` : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
-                >
-                  <span className={`font-bold text-white px-2 py-0.5 rounded text-sm ${info.color} mr-2`}>{info.label}</span>
-                  <span className="text-gray-400 text-sm">{info.desc}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Summary */}
-            <div className="bg-gray-800 rounded-xl p-3 text-sm mb-3 space-y-1">
-              <div className="flex gap-2 flex-wrap">
-                <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${PROTOCOL_INFO[form.protocol]?.color}`}>{form.protocol?.toUpperCase()}</span>
-                <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${METHOD_INFO[form.method]?.color}`}>{form.method?.toUpperCase()}</span>
-                <span className="px-2 py-0.5 rounded text-xs font-bold text-white bg-gray-600">{form.length}-bit</span>
-                <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${ALGO_INFO[form.algorithm]?.color}`}>{form.algorithm}</span>
-              </div>
-            </div>
-
-            {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-
-            <button
-              onClick={handleBind}
-              disabled={binding}
-              className="btn btn-primary w-full gap-2"
-            >
-              {binding ? <><RefreshCw size={16} className="animate-spin" /> Generating...</> : <><ShieldCheck size={16} /> {t('devices.bindGenerate')}</>}
-            </button>
-          </div>
-        )}
-
-        {/* Navigation */}
-        {!bindResult && (
-          <div className="flex gap-3 mt-4">
-            {step > 1 && (
-              <button onClick={() => setStep(s => s - 1)} className="btn btn-ghost flex-1 gap-1">
-                <ChevronLeft size={16} /> Back
-              </button>
-            )}
-            {step < 4 && (
+        {/* Method selection */}
+        <div className="mb-4">
+          <h3 className="font-semibold text-white mb-2 text-sm">Generation Method</h3>
+          <div className="grid gap-2">
+            {Object.entries(METHOD_INFO).map(([key, info]) => (
               <button
-                onClick={() => setStep(s => s + 1)}
-                disabled={!stepsValid[step]}
-                className="btn btn-primary flex-1 gap-1"
+                key={key}
+                onClick={() => setForm(f => ({ ...f, method: key }))}
+                className={`w-full flex items-center justify-between p-3 rounded-xl border-2 transition-all text-left
+                  ${form.method === key ? `border-blue-500 ${info.color} bg-opacity-20` : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
               >
-                Next <ChevronRight size={16} />
+                <div className="flex items-center gap-2">
+                  <span className={`font-bold text-white px-2 py-0.5 rounded text-xs ${info.color}`}>{info.label}</span>
+                  <span className="text-gray-300 text-sm">{info.desc}</span>
+                  {key === recommended && (
+                    <span className="text-xs bg-yellow-800 text-yellow-300 px-1.5 py-0.5 rounded">recommended</span>
+                  )}
+                </div>
+                <span className="text-xs text-green-400 font-mono ml-2">{info.entropy}</span>
               </button>
-            )}
+            ))}
           </div>
-        )}
+        </div>
+
+        {/* Key length selection */}
+        <div className="mb-4">
+          <h3 className="font-semibold text-white mb-2 text-sm">Key Length</h3>
+          <div className="grid grid-cols-3 gap-2">
+            {Object.entries(LENGTH_INFO).map(([bits, info]) => (
+              <button
+                key={bits}
+                onClick={() => setForm(f => ({ ...f, length: parseInt(bits) }))}
+                className={`p-3 rounded-xl border-2 transition-all text-center
+                  ${form.length === parseInt(bits) ? 'border-blue-500 bg-blue-900 bg-opacity-30' : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
+              >
+                <p className="font-bold text-white text-sm">{info.label}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{info.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Protocol selection */}
+        <div className="mb-4">
+          <h3 className="font-semibold text-white mb-2 text-sm">Protocol</h3>
+          <div className="grid gap-2">
+            {Object.entries(PROTOCOL_INFO).map(([key, info]) => (
+              <button
+                key={key}
+                onClick={() => setForm(f => ({ ...f, protocol: key }))}
+                className={`w-full flex items-center justify-between p-3 rounded-xl border-2 transition-all text-left
+                  ${form.protocol === key ? `border-blue-500 ${info.color} bg-opacity-20` : 'border-gray-700 bg-gray-800 hover:border-gray-500'}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`font-bold text-white px-2 py-0.5 rounded text-xs ${info.color}`}>{info.label}</span>
+                  <span className="text-gray-300 text-sm">{info.desc}</span>
+                </div>
+                <span className="text-xs text-gray-400">{info.latency}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div className="bg-gray-800 rounded-xl p-3 text-sm mb-4 flex gap-2 flex-wrap">
+          {form.method && (
+            <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${METHOD_INFO[form.method]?.color}`}>
+              {form.method.toUpperCase()}
+            </span>
+          )}
+          <span className="px-2 py-0.5 rounded text-xs font-bold text-white bg-gray-600">{form.length}-bit</span>
+          {form.protocol && (
+            <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${PROTOCOL_INFO[form.protocol]?.color}`}>
+              {form.protocol.toUpperCase()}
+            </span>
+          )}
+          {form.method && (
+            <span className={`px-2 py-0.5 rounded text-xs font-bold ml-auto ${
+              getMatchStatus(device.device_type, form.method) === 'optimal'
+                ? 'bg-green-900 text-green-300'
+                : 'bg-yellow-900 text-yellow-300'
+            }`}>
+              {getMatchStatus(device.device_type, form.method) === 'optimal' ? '✓ Optimal' : '⚠ Non-Optimal'}
+            </span>
+          )}
+        </div>
+
+        {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+
+        <button
+          onClick={handleBind}
+          disabled={binding || !form.protocol}
+          className="btn btn-primary w-full gap-2"
+        >
+          {binding
+            ? <><RefreshCw size={16} className="animate-spin" /> Generating & Binding Key...</>
+            : <><ShieldCheck size={16} /> Generate & Bind Key</>}
+        </button>
       </div>
     </div>
   );
 };
 
-const DeviceCard = ({ device, onDelete, onSimulateStatus, onBindKey, onRotateKey }) => {
+const DeviceCard = ({ device, onDelete, onSimulateStatus, onBindKey, onRotateKey, onRevoke }) => {
   const statusCfg = getStatusConfig(device.status);
   const StatusIcon = statusCfg.icon;
   const proto = PROTOCOL_INFO[device.protocol];
@@ -291,7 +289,7 @@ const DeviceCard = ({ device, onDelete, onSimulateStatus, onBindKey, onRotateKey
       <div className={`absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold
         ${device.is_secured ? 'bg-green-900 text-green-300 border border-green-700' : 'bg-red-900 text-red-300 border border-red-800'}`}>
         {device.is_secured ? <ShieldCheck size={12} /> : <ShieldOff size={12} />}
-        {device.is_secured ? 'SECURED' : 'UNSECURED'}
+        {device.is_secured ? 'SECURED' : 'NO KEY'}
       </div>
 
       {/* Header */}
@@ -300,8 +298,8 @@ const DeviceCard = ({ device, onDelete, onSimulateStatus, onBindKey, onRotateKey
         <p className="text-xs text-gray-400 font-mono mt-0.5">{device.device_id}</p>
       </div>
 
-      {/* Status + Protocol */}
-      <div className="flex items-center gap-3 mb-3">
+      {/* Status + Protocol + Type */}
+      <div className="flex items-center gap-2 flex-wrap mb-3">
         <div className="flex items-center gap-1.5">
           <span className={`w-2.5 h-2.5 rounded-full ${statusCfg.color} ${device.status === 'online' ? 'animate-pulse' : ''}`} />
           <span className={`text-sm font-medium ${statusCfg.text}`}>{statusCfg.label}</span>
@@ -328,13 +326,13 @@ const DeviceCard = ({ device, onDelete, onSimulateStatus, onBindKey, onRotateKey
         </div>
       )}
 
-      {/* Key info (if secured) */}
+      {/* Key security info (if secured) */}
       {device.is_secured && device.bound_key_id && (
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 mb-3 text-xs text-gray-500 dark:text-gray-400">
-          <span className="flex items-center gap-1">
-            <Key size={11} className="text-green-400" />
-            Key ID: {device.bound_key_id} bound via {(device.protocol || '').toUpperCase()}
-          </span>
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 mb-3 text-xs space-y-1">
+          <div className="flex items-center gap-1 text-green-400">
+            <Key size={11} /> <span className="font-semibold">Key Bound</span>
+            <span className="text-gray-400 ml-1">ID: {device.bound_key_id}</span>
+          </div>
         </div>
       )}
 
@@ -343,31 +341,23 @@ const DeviceCard = ({ device, onDelete, onSimulateStatus, onBindKey, onRotateKey
       {/* Actions */}
       <div className="flex gap-2 flex-wrap">
         {!device.is_secured ? (
-          <button
-            onClick={onBindKey}
-            className="btn btn-primary flex-1 text-xs py-1.5 gap-1"
-          >
-            <Key size={14} /> Bind Key
+          <button onClick={onBindKey} className="btn btn-primary flex-1 text-xs py-1.5 gap-1">
+            <Key size={14} /> Generate & Bind Key
           </button>
         ) : (
-          <button
-            onClick={onRotateKey}
-            className="btn text-xs py-1.5 gap-1 flex-1 border border-blue-600 text-blue-400 hover:bg-blue-900 hover:bg-opacity-20"
-          >
-            <RefreshCw size={14} /> Rotate Key
-          </button>
+          <>
+            <button onClick={onRotateKey} className="btn text-xs py-1.5 gap-1 flex-1 border border-blue-600 text-blue-400 hover:bg-blue-900 hover:bg-opacity-20">
+              <RefreshCw size={14} /> Rotate Key
+            </button>
+            <button onClick={onRevoke} className="btn text-xs py-1.5 gap-1 border border-red-700 text-red-400 hover:bg-red-900 hover:bg-opacity-20">
+              <XCircle size={14} />
+            </button>
+          </>
         )}
-        <button
-          onClick={onSimulateStatus}
-          className="btn btn-ghost text-xs py-1.5 px-2"
-          title="Cycle status"
-        >
+        <button onClick={onSimulateStatus} className="btn btn-ghost text-xs py-1.5 px-2" title="Cycle status">
           <Activity size={14} />
         </button>
-        <button
-          onClick={onDelete}
-          className="btn text-xs py-1.5 px-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900 dark:hover:bg-opacity-20"
-        >
+        <button onClick={onDelete} className="btn text-xs py-1.5 px-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900 dark:hover:bg-opacity-20">
           <Trash2 size={14} />
         </button>
       </div>
@@ -422,7 +412,7 @@ const DevicesPage = () => {
       setFormData({ device_id: '', device_name: '', device_type: 'sensor', manufacturer: '', model: '', cpu_type: '', memory_kb: '', storage_kb: '' });
       setShowForm(false);
     } catch (e) {
-      console.error(e);
+      alert(e?.detail || 'Failed to create device');
     }
   };
 
@@ -460,6 +450,16 @@ const DevicesPage = () => {
     }
   };
 
+  const handleRevokeKey = async (device) => {
+    if (!confirm(`Revoke key for ${device.device_name}? The device will become unsecured.`)) return;
+    try {
+      await deviceAPI.revokeKey(device.id);
+      await loadDevices();
+    } catch (e) {
+      alert(e?.detail || 'Revoke failed');
+    }
+  };
+
   const handleBindSuccess = async () => {
     await loadDevices();
     setBindDevice(null);
@@ -489,11 +489,17 @@ const DevicesPage = () => {
           </div>
           <div className="card-hover text-center py-4">
             <p className="text-2xl font-bold text-green-400">{securedCount}</p>
-            <p className="text-sm text-gray-500 mt-1">{t('devices.secured')}</p>
+            <p className="text-sm text-gray-500 mt-1">
+              <ShieldCheck size={14} className="inline mr-1 text-green-400" />
+              Secured
+            </p>
           </div>
           <div className="card-hover text-center py-4">
             <p className="text-2xl font-bold text-red-400">{unsecuredCount}</p>
-            <p className="text-sm text-gray-500 mt-1">{t('devices.unsecured')}</p>
+            <p className="text-sm text-gray-500 mt-1">
+              <ShieldOff size={14} className="inline mr-1 text-red-400" />
+              No Key
+            </p>
           </div>
         </div>
       )}
@@ -514,7 +520,11 @@ const DevicesPage = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('devices.type')}</label>
               <select value={formData.device_type} onChange={e => setFormData({ ...formData, device_type: e.target.value })} className="input">
-                <option>sensor</option><option>actuator</option><option>gateway</option><option>controller</option>
+                <option value="sensor">Sensor</option>
+                <option value="actuator">Actuator</option>
+                <option value="gateway">Gateway</option>
+                <option value="controller">Controller</option>
+                <option value="camera">Camera</option>
               </select>
             </div>
             <div>
@@ -541,7 +551,9 @@ const DevicesPage = () => {
         <div className="text-center py-16 text-gray-500">{t('devices.loading')}</div>
       ) : devices.length === 0 ? (
         <div className="card text-center py-16">
-          <p className="text-gray-500">{t('devices.empty')}</p>
+          <ShieldOff size={48} className="mx-auto text-gray-500 mb-4" />
+          <p className="text-gray-500 text-lg mb-2">{t('devices.empty')}</p>
+          <p className="text-gray-400 text-sm">Add your first IoT device and generate a security key</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -553,6 +565,7 @@ const DevicesPage = () => {
               onSimulateStatus={() => handleSimulateStatus(device)}
               onBindKey={() => setBindDevice(device)}
               onRotateKey={() => handleRotateKey(device)}
+              onRevoke={() => handleRevokeKey(device)}
             />
           ))}
         </div>

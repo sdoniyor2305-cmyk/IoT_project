@@ -315,7 +315,7 @@ def get_iot_overview(
             "source": c.source_device.device_name if c.source_device else "?",
             "target": c.target_device.device_name if c.target_device else "?",
             "protocol": c.protocol,
-            "algorithm": c.algorithm,
+            "key_method": c.key_method,
             "transmission_time_ms": c.transmission_time_ms,
             "created_at": c.created_at.isoformat(),
         }
@@ -463,7 +463,6 @@ def get_security_report(
             if k:
                 key_info = {
                     "key_id": k.key_id[:16] + "...",
-                    "algorithm": k.algorithm_used,
                     "method": k.generation_method.upper(),
                     "length_bits": k.key_length_bits,
                     "randomness_score": round(k.randomness_score or 0, 1),
@@ -475,6 +474,21 @@ def get_security_report(
             Communication.user_id == user_id,
         ).count()
 
+        score = key_info["randomness_score"] if key_info else 0
+        if d.is_secured and key_info:
+            if score >= 95:
+                grade = "A"
+            elif score >= 85:
+                grade = "B"
+            elif score >= 70:
+                grade = "C"
+            elif score >= 50:
+                grade = "D"
+            else:
+                grade = "F"
+        else:
+            grade = "F"
+
         report.append({
             "device_id": d.id,
             "device_name": d.device_name,
@@ -484,11 +498,7 @@ def get_security_report(
             "protocol": (d.protocol or "").upper() if d.protocol else None,
             "key_info": key_info,
             "communications": comm_count,
-            "security_grade": (
-                "A" if d.is_secured and key_info and key_info["randomness_score"] >= 90
-                else "B" if d.is_secured
-                else "F"
-            ),
+            "security_grade": grade,
         })
 
     return report

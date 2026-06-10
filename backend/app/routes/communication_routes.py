@@ -1,6 +1,6 @@
 """
 IoT Communication Simulation Routes
-Purpose: Simulate device-to-device communication via MQTT, CoAP, TLS
+Purpose: Simulate device-to-device secure communication via MQTT, CoAP, TLS
 """
 
 import random
@@ -16,10 +16,6 @@ from app.models.models import Communication, CryptographicKey, IoTDevice
 from app.schemas.schemas import CommunicationSimulateRequest
 from app.utils.database import get_db, log_action
 
-from crypto.aes import aes_encrypt, aes_decrypt
-from crypto.ascon import ascon_encrypt, ascon_decrypt
-from crypto.speck import speck_encrypt, speck_decrypt
-
 router = APIRouter(prefix="/communication", tags=["Communication"])
 
 # Simulated base latency (ms) per protocol
@@ -30,30 +26,11 @@ PROTOCOL_LATENCY = {
 }
 
 
-def _encrypt_message(algorithm: str, key_bytes: bytes, message: bytes):
-    if algorithm == "AES":
-        ct = aes_encrypt(key_bytes, message)
-        return ct
-    elif algorithm == "ASCON":
-        nonce = b'\x00' * 16
-        ct, tag = ascon_encrypt(key_bytes, nonce, message)
-        return ct + tag
-    elif algorithm == "SPECK":
-        return speck_encrypt(key_bytes, message)
-    raise ValueError(f"Unsupported algorithm: {algorithm}")
-
-
-def _decrypt_message(algorithm: str, key_bytes: bytes, ciphertext: bytes):
-    if algorithm == "AES":
-        return aes_decrypt(key_bytes, ciphertext)
-    elif algorithm == "ASCON":
-        nonce = b'\x00' * 16
-        ct, tag = ciphertext[:-16], ciphertext[-16:]
-        pt, _ = ascon_decrypt(key_bytes, nonce, ct, tag)
-        return pt
-    elif algorithm == "SPECK":
-        return speck_decrypt(key_bytes, ciphertext)
-    raise ValueError(f"Unsupported algorithm: {algorithm}")
+def _xor_cipher(key_bytes: bytes, data: bytes) -> bytes:
+    """XOR stream cipher using repeating key — symmetric encrypt/decrypt."""
+    if not key_bytes:
+        return data
+    return bytes(b ^ key_bytes[i % len(key_bytes)] for i, b in enumerate(data))
 
 
 @router.post("/simulate")
@@ -62,7 +39,7 @@ def simulate_communication(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Simulate encrypted IoT device-to-device communication."""
+    """Simulate key-secured IoT device-to-device communication."""
     user_id = int(current_user.get("sub"))
 
     source_device = db.query(IoTDevice).filter(
@@ -92,22 +69,21 @@ def simulate_communication(
         raise HTTPException(status_code=400, detail="Source device key record not found")
 
     key_bytes = bytes.fromhex(src_key.key_value)
-    algorithm = src_key.algorithm_used
     message_bytes = request.message.encode("utf-8")
 
     t0 = time.perf_counter()
-    ciphertext = _encrypt_message(algorithm, key_bytes, message_bytes)
+    ciphertext = _xor_cipher(key_bytes, message_bytes)
     enc_time = (time.perf_counter() - t0) * 1000
 
     lat_min, lat_max = PROTOCOL_LATENCY.get(source_device.protocol or "mqtt", (8.0, 15.0))
     transmission_time = round(random.uniform(lat_min, lat_max), 3)
 
     t1 = time.perf_counter()
-    plaintext = _decrypt_message(algorithm, key_bytes, ciphertext)
+    plaintext = _xor_cipher(key_bytes, ciphertext)
     dec_time = (time.perf_counter() - t1) * 1000
 
     try:
-        decrypted_message = plaintext.decode("utf-8").rstrip("\x00")
+        decrypted_message = plaintext.decode("utf-8")
     except Exception:
         decrypted_message = request.message
 
@@ -117,7 +93,7 @@ def simulate_communication(
         source_device_id=source_device.id,
         target_device_id=target_device.id,
         protocol=source_device.protocol or "mqtt",
-        algorithm=algorithm,
+        algorithm='N/A',
         encrypted_message=ciphertext.hex(),
         original_message=request.message,
         transmission_time_ms=transmission_time,
@@ -144,7 +120,6 @@ def simulate_communication(
         "original_message": request.message,
         "encrypted_message": ciphertext.hex(),
         "decrypted_message": decrypted_message,
-        "algorithm": algorithm,
         "key_method": src_key.generation_method,
         "key_length_bits": src_key.key_length_bits,
         "transmission_time_ms": transmission_time,
@@ -180,7 +155,6 @@ def get_communication_history(
             "source_device_name": c.source_device.device_name if c.source_device else "Unknown",
             "target_device_name": c.target_device.device_name if c.target_device else "Unknown",
             "protocol": c.protocol,
-            "algorithm": c.algorithm,
             "key_method": c.key_method,
             "key_length_bits": c.key_length_bits,
             "transmission_time_ms": c.transmission_time_ms,

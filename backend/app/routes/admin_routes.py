@@ -185,7 +185,6 @@ def list_all_keys(
             key_id=k.key_id,
             key_length_bits=k.key_length_bits,
             generation_method=k.generation_method,
-            algorithm_used=k.algorithm_used,
             randomness_score=k.randomness_score,
             owner_username=owner.username if owner else "unknown",
             created_at=k.created_at,

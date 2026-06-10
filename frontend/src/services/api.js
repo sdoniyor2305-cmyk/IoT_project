@@ -9,7 +9,6 @@ const api = axios.create({
   },
 });
 
-// Add token to requests
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
@@ -18,7 +17,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle responses
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
@@ -34,13 +32,13 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (username, email, password, full_name) =>
     api.post('/auth/register', { username, email, password, full_name }),
-  
+
   login: (username, password) =>
     api.post('/auth/login', { username, password }),
-  
+
   getMe: () =>
     api.get('/auth/me'),
-  
+
   logout: () =>
     api.post('/auth/logout'),
 };
@@ -70,44 +68,30 @@ export const deviceAPI = {
 
   rotateKey: (deviceId) =>
     api.post(`/devices/${deviceId}/rotate-key`),
+
+  revokeKey: (deviceId) =>
+    api.post(`/devices/${deviceId}/revoke-key`),
 };
 
 // Key APIs
 export const keyAPI = {
   generate: (keyData) =>
     api.post('/keys/generate', keyData),
-  
+
   list: () =>
     api.get('/keys'),
-  
+
   get: (keyId) =>
     api.get(`/keys/${keyId}`),
-  
+
   delete: (keyId) =>
     api.delete(`/keys/${keyId}`),
-  
+
   export: (keyId) =>
     api.post(`/keys/${keyId}/export`),
-  
+
   getEntropy: (keyId) =>
     api.get(`/keys/${keyId}/entropy`),
-};
-
-// Encryption APIs
-export const encryptionAPI = {
-  encrypt: (encryptionData) =>
-    api.post('/crypto/encrypt', encryptionData),
-  
-  decrypt: (decryptionData) =>
-    api.post('/crypto/decrypt', decryptionData),
-  
-  listOperations: (algorithm, operationType) =>
-    api.get('/crypto/operations', {
-      params: { algorithm, operation_type: operationType },
-    }),
-  
-  getOperation: (operationId) =>
-    api.get(`/crypto/operations/${operationId}`),
 };
 
 // Communication APIs
@@ -123,9 +107,6 @@ export const communicationAPI = {
 export const analysisAPI = {
   analyzeEntropy: (analysisData) =>
     api.post('/analysis/entropy', analysisData),
-
-  getAlgorithmComparison: () =>
-    api.get('/analysis/performance/comparison'),
 
   getDashboardStatistics: () =>
     api.get('/analysis/dashboard/statistics'),
@@ -144,9 +125,6 @@ export const analysisAPI = {
 
   getKeyUsageHistory: (keyId) =>
     api.get(`/analysis/keys/${keyId}/history`),
-
-  getAlgorithmStatistics: (algorithm) =>
-    api.get(`/analysis/algorithms/${algorithm}/statistics`),
 };
 
 // Admin APIs
@@ -179,7 +157,6 @@ export const adminAPI = {
     api.get('/admin/logs'),
 };
 
-// General APIs
 export const generalAPI = {
   getInfo: () =>
     api.get('/api/info'),
