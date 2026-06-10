@@ -5,12 +5,11 @@ Purpose: Analyze entropy, randomness, and performance of keys
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
 import uuid
 
 from app.models.models import CryptographicKey, AnalysisResult, Operation, IoTDevice, Communication
 from app.schemas.schemas import (
-    AnalysisRequest, EntropyAnalysisResponse, AlgorithmComparisonResponse,
+    AnalysisRequest, EntropyAnalysisResponse,
     DashboardStatisticsResponse, IoTOverviewResponse
 )
 from app.auth.auth import get_current_user
@@ -105,52 +104,13 @@ def analyze_entropy(
     )
 
 
-@router.get("/performance/comparison", response_model=List[AlgorithmComparisonResponse])
+@router.get("/performance/comparison")
 def get_algorithm_comparison(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get performance comparison of algorithms
-    
-    Args:
-        current_user: Current authenticated user
-        db: Database session
-        
-    Returns:
-        Algorithm comparison data
-    """
-    user_id = int(current_user.get("sub"))
-    
-    algorithms = ["ASCON", "AES", "SPECK"]
-    results = []
-    
-    for algo in algorithms:
-        # Get operations for this algorithm
-        operations = db.query(Operation).filter(
-            Operation.user_id == user_id,
-            Operation.algorithm == algo,
-            Operation.status == "success"
-        ).all()
-        
-        if not operations:
-            continue
-        
-        # Calculate metrics
-        avg_execution_time = sum(op.execution_time_ms for op in operations) / len(operations)
-        avg_throughput = sum(op.throughput_kbs for op in operations if op.throughput_kbs) / len(operations)
-        success_count = len([op for op in operations if op.status == "success"])
-        success_rate = (success_count / len(operations)) * 100 if operations else 0
-        
-        results.append(AlgorithmComparisonResponse(
-            algorithm=algo,
-            avg_execution_time_ms=avg_execution_time,
-            avg_throughput_kbs=avg_throughput,
-            total_operations=len(operations),
-            success_rate=success_rate
-        ))
-    
-    return results
+    """Kept for backwards compatibility — returns empty list."""
+    return []
 
 
 @router.get("/dashboard/statistics", response_model=DashboardStatisticsResponse)
@@ -510,57 +470,5 @@ def get_algorithm_statistics(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get statistics for specific algorithm
-    
-    Args:
-        algorithm: Algorithm name
-        current_user: Current authenticated user
-        db: Database session
-        
-    Returns:
-        Algorithm statistics
-    """
-    user_id = int(current_user.get("sub"))
-    
-    if algorithm not in ["ASCON", "AES", "SPECK"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid algorithm"
-        )
-    
-    # Get all operations for this algorithm
-    operations = db.query(Operation).filter(
-        Operation.user_id == user_id,
-        Operation.algorithm == algorithm
-    ).all()
-    
-    if not operations:
-        return {
-            "algorithm": algorithm,
-            "total_operations": 0,
-            "statistics": {}
-        }
-    
-    # Calculate statistics
-    successful = len([op for op in operations if op.status == "success"])
-    failed = len([op for op in operations if op.status == "failed"])
-    
-    encrypt_ops = [op for op in operations if op.operation_type == "encrypt"]
-    decrypt_ops = [op for op in operations if op.operation_type == "decrypt"]
-    
-    avg_encrypt_time = sum(op.execution_time_ms for op in encrypt_ops) / len(encrypt_ops) if encrypt_ops else 0
-    avg_decrypt_time = sum(op.execution_time_ms for op in decrypt_ops) / len(decrypt_ops) if decrypt_ops else 0
-    
-    return {
-        "algorithm": algorithm,
-        "total_operations": len(operations),
-        "successful": successful,
-        "failed": failed,
-        "success_rate": (successful / len(operations)) * 100,
-        "encrypt_operations": len(encrypt_ops),
-        "decrypt_operations": len(decrypt_ops),
-        "avg_encrypt_time_ms": avg_encrypt_time,
-        "avg_decrypt_time_ms": avg_decrypt_time,
-        "total_data_processed_bytes": sum((op.input_size_bytes or 0) for op in operations)
-    }
+    """Kept for backwards compatibility — returns empty stats."""
+    return {"algorithm": algorithm, "total_operations": 0, "statistics": {}}
